@@ -1,0 +1,48 @@
+name: Build and Test C++ Client
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            libssl-dev \
+            pkg-config \
+            cppcheck \
+            clang-tidy
+
+      - name: Configure CMake
+        run: cmake -B build -S . -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run static analysis (cppcheck)
+        run: |
+          cppcheck \
+            --enable=all \
+            --suppress=missingIncludeSystem \
+            --error-exitcode=1 \
+            --std=c++17 \
+            src/ include/
+        continue-on-error: true   # report but don't fail the build
+
+      - name: Run tests (ctest)
+        run: ctest --test-dir build --output-on-failure
+        # Note: test_connection connects to example.com
+        # If your runner has no internet access, skip with:
+        # run: echo "Skipping network tests in CI"
