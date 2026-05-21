@@ -143,8 +143,9 @@ void SecureConnection::initSSLContext() {
         throw std::runtime_error("SSL_CTX_new failed: " + getOpenSSLError());
     }
 
-    // Enforce TLS 1.2 minimum — rejects servers running older insecure versions
-    SSL_CTX_set_min_proto_version(m_ctx, TLS1_2_VERSION);
+    // Enforce TLS 1.3 only — no fallback to older versions
+    SSL_CTX_set_min_proto_version(m_ctx, TLS1_3_VERSION);
+    SSL_CTX_set_max_proto_version(m_ctx, TLS1_3_VERSION);
 
     // Load the system CA certificate store so we can verify server certs
     if (!SSL_CTX_set_default_verify_paths(m_ctx)) {
