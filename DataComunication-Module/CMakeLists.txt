@@ -16,7 +16,7 @@ add_compile_options(
 )
 
 # ── Find OpenSSL ──────────────────────────────────────────────────────────────
-find_package(OpenSSL REQUIRED)
+find_package(OpenSSL 1.1.1 REQUIRED)
 message(STATUS "OpenSSL version: ${OPENSSL_VERSION}")
 message(STATUS "OpenSSL include: ${OPENSSL_INCLUDE_DIR}")
 
