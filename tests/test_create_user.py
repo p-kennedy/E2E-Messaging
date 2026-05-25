@@ -63,12 +63,12 @@ def run_tests():
     except Exception:
         print(f"  PASS  duplicate username correctly rejected")
 
-    # # --- Cleanup ---
-    # if user:
-    #     crud.delete_user(user['user_id'])
-    # for f in (f"{TEST_USERNAME}_private_keys.bin", f"{TEST_USERNAME}_local_salt.bin"):
-    #     if os.path.exists(f):
-    #         os.remove(f)
+    # --- Cleanup ---
+    if user:
+        crud.delete_user(user['user_id'])
+    for f in (f"{TEST_USERNAME}_private_keys.bin", f"{TEST_USERNAME}_local_salt.bin"):
+        if os.path.exists(f):
+            os.remove(f)
 
     print()
     if failures:
