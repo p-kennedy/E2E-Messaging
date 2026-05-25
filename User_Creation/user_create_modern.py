@@ -27,16 +27,18 @@ def _raw_priv(key):
 
 def _derive_key(password: bytes, salt: bytes) -> bytes:
     return Argon2id(
-        time_cost=2,
-        memory_cost=2**16,
-        parallelism=2,
+        salt=salt,
         length=32,
-        salt=salt
+        iterations=2,
+        lanes=2,
+        memory_cost=2**16,
     ).derive(password)
 
-def create_user_with_modern_keys():
-    username = input("Enter username: ")
-    password = getpass.getpass("Enter password: ")
+def create_user(username: str, password: str) -> dict:
+    """Create a user, store encrypted keys locally, and register in the DB.
+
+    Returns the created user row from the database.
+    """
     password_bytes = password.encode()
 
     # Identity key: Ed25519 — long-lived signing key, never rotated
@@ -88,16 +90,24 @@ def create_user_with_modern_keys():
         ]
     }
 
-    init_pool()
     user = crud.create_user(
         username=username,
         password_hash=password_hash,
         public_key=json.dumps(prekey_bundle)
     )
+    return user
+
+
+def create_user_interactive():
+    username = input("Enter username: ")
+    password = getpass.getpass("Enter password: ")
+
+    init_pool()
+    user = create_user(username, password)
 
     print(f"User '{username}' created (user_id: {user['user_id']}).")
     print(f"  Private keys encrypted and stored in {username}_private_keys.bin")
     print(f"  {NUM_ONE_TIME_PREKEYS} one-time prekeys uploaded to server.")
 
 if __name__ == "__main__":
-    create_user_with_modern_keys()
+    create_user_interactive()
