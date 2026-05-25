@@ -13,8 +13,8 @@ int main() {
 
         client.login("alice", "password123");
 
-        std::string fakeCiphertext = "BASE64_ENCODED_CIPHERTEXT_HERE";
-        client.sendMessage("bob", fakeCiphertext);
+        // ciphertext, nonce, and digest will come from the crypto module
+        client.sendMessage("bob", "BASE64_CIPHERTEXT", "BASE64_NONCE", "BASE64_DIGEST");
 
         auto messages = client.fetchMessages();
         std::cout << "Fetched " << messages.size() << " messages\n";

@@ -10,27 +10,34 @@ echo "=== Server Setup ==="
 
 # 1. Install C++ dependencies for the network module
 echo ""
-echo "[1/3] Installing network dependencies..."
+echo "[1/4] Installing network dependencies..."
 bash "$SCRIPT_DIR/network/install_deps.sh"
 
-# 2. Initialise the database (creates tables via setup.py)
+# 2. Install Python dependencies for the API server
 echo ""
-echo "[2/3] Setting up database..."
+echo "[2/4] Installing Python API dependencies..."
+pip3 install -r "$SCRIPT_DIR/requirements.txt"
+
+# 3. Initialise the database (creates tables via setup.py)
+echo ""
+echo "[3/4] Setting up database..."
 cd "$SCRIPT_DIR/database"
 python3 setup.py
 cd "$SCRIPT_DIR"
 
-# 3. Build the network module
+# 4. Build the network module
 echo ""
-echo "[3/3] Building server network module..."
+echo "[4/4] Building server network module..."
 cmake -B "$SCRIPT_DIR/network/build" -S "$SCRIPT_DIR/network"
 cmake --build "$SCRIPT_DIR/network/build" --parallel
 
 echo ""
 echo "=== Server setup complete ==="
 echo ""
-echo "Binaries:"
-echo "  $SCRIPT_DIR/network/build/secure_server"
+echo "Start both processes to run the server:"
 echo ""
-echo "To start the server:"
+echo "  # Terminal 1 — Python API (handles business logic + database)"
+echo "  cd $SCRIPT_DIR && uvicorn api:app --host 127.0.0.1 --port 8000"
+echo ""
+echo "  # Terminal 2 — C++ TLS server (handles TLS, proxies to API)"
 echo "  $SCRIPT_DIR/network/build/secure_server <cert.pem> <key.pem> <port>"

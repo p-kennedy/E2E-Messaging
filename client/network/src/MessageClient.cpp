@@ -26,12 +26,15 @@ void MessageClient::login(const std::string& username, const std::string& passwo
     std::cout << "[Auth] Logged in successfully\n";
 }
 
-void MessageClient::sendMessage(const std::string& recipient, const std::string& ciphertext) {
+void MessageClient::sendMessage(const std::string& recipient, const std::string& ciphertext,
+                                const std::string& nonce, const std::string& digest) {
     if (!isAuthenticated())
         throw std::runtime_error("Not authenticated — call login() first");
 
     std::string body = "{\"recipient\":\"" + recipient + "\","
-                       "\"ciphertext\":\"" + ciphertext + "\"}";
+                       "\"ciphertext\":\"" + ciphertext + "\","
+                       "\"nonce\":\""      + nonce      + "\","
+                       "\"digest\":\""     + digest     + "\"}";
 
     doRequest("POST", "/api/messages", body);
     std::cout << "[Message] Sent to " << recipient << "\n";

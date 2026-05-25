@@ -25,8 +25,9 @@ public:
     // Authenticate with the server. Stores the returned auth token. Throws on failure.
     void login(const std::string& username, const std::string& password);
 
-    // Send an encrypted message. The caller encrypts the payload before passing it here.
-    void sendMessage(const std::string& recipient, const std::string& ciphertext);
+    // Send an encrypted message. ciphertext, nonce, and digest come from the crypto module.
+    void sendMessage(const std::string& recipient, const std::string& ciphertext,
+                     const std::string& nonce, const std::string& digest);
 
     // Fetch all messages for the logged-in user.
     std::vector<Message> fetchMessages();
