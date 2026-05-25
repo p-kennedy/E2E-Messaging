@@ -1,0 +1,36 @@
+name: Notify DB reset required
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "server/database/**"
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Open reminder issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --title "Action required: reset DB on VM" \
+            --body "## DB schema change detected
+
+          A change to \`server/database/\` was merged to main in commit \`${{ github.sha }}\` by **${{ github.actor }}**.
+
+          **Manually run the following on the VM:**
+          \`\`\`bash
+          cd /path/to/E2E-Messaging && python server/database/setup.py
+          \`\`\`
+
+          Close this issue once done." \
+            --label "database"
