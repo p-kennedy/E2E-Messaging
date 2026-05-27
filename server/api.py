@@ -1,0 +1,112 @@
+import os
+import sys
+import datetime
+import jwt
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel
+from passlib.context import CryptContext
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "database"))
+from connection import init_pool
+import crud
+
+app = FastAPI()
+security = HTTPBearer()
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+JWT_SECRET = os.getenv("JWT_SECRET", "change-me-in-production")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRY_HOURS = 24
+
+
+# ── Models ────────────────────────────────────────────────────────────────────
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+    public_key: str
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class SendMessageRequest(BaseModel):
+    recipient: str
+    ciphertext: str
+    nonce: str
+    digest: str
+
+
+# ── Auth helpers ──────────────────────────────────────────────────────────────
+
+def make_token(user_id: str) -> str:
+    payload = {
+        "sub": user_id,
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=JWT_EXPIRY_HOURS),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return payload["sub"]
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+@app.post("/api/auth/register", status_code=201)
+def register(req: RegisterRequest):
+    if crud.get_user_by_username(req.username):
+        raise HTTPException(status_code=409, detail="Username already taken")
+    password_hash = pwd_context.hash(req.password)
+    user = crud.create_user(req.username, password_hash, req.public_key)
+    return {"user_id": str(user["user_id"]), "username": user["username"]}
+
+@app.post("/api/auth/login")
+def login(req: LoginRequest):
+    user = crud.get_user_by_username(req.username)
+    if not user or not pwd_context.verify(req.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    return {"token": make_token(str(user["user_id"]))}
+
+@app.post("/api/messages", status_code=201)
+def send_message(req: SendMessageRequest, user_id: str = Depends(get_current_user)):
+    recipient = crud.get_user_by_username(req.recipient)
+    if not recipient:
+        raise HTTPException(status_code=404, detail="Recipient not found")
+    crud.create_message(
+        sender_id=user_id,
+        recipient_id=str(recipient["user_id"]),
+        content_ciphertext=req.ciphertext,
+        nonce=req.nonce,
+        digest=req.digest,
+    )
+    return {"status": "queued"}
+
+@app.get("/api/messages")
+def fetch_messages(user_id: str = Depends(get_current_user)):
+    messages = crud.get_messages_for_recipient(user_id)
+    return {"messages": [
+        {
+            "message_id":  str(m["message_id"]),
+            "sender_id":   str(m["sender_id"]),
+            "recipient_id":str(m["recipient_id"]),
+            "ciphertext":  m["content_ciphertext"],
+            "nonce":       m["nonce"],
+            "digest":      m["digest"],
+            "created_at":  str(m["created_at"]),
+        }
+        for m in messages
+    ]}
+
+
+# ── Startup ───────────────────────────────────────────────────────────────────
+
+@app.on_event("startup")
+def startup():
+    init_pool()
