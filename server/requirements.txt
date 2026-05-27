@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+passlib[bcrypt]
+pyjwt
+psycopg2-binary
