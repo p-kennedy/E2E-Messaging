@@ -1,7 +1,6 @@
 {
   "name": "blockchain",
   "version": "1.0.0",
-  "type": "module",
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@types/node": "^22.19.19",
