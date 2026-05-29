@@ -6,7 +6,11 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from passlib.context import CryptContext
+from blockchain_service import record_digest_on_chain
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
+_executor = ThreadPoolExecutor(max_workers=2)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "database"))
 from connection import init_pool
 import crud
@@ -79,13 +83,26 @@ def send_message(req: SendMessageRequest, user_id: str = Depends(get_current_use
     recipient = crud.get_user_by_username(req.recipient)
     if not recipient:
         raise HTTPException(status_code=404, detail="Recipient not found")
-    crud.create_message(
+
+    # Save msg to DB first
+    msg = crud.create_message(
         sender_id=user_id,
         recipient_id=str(recipient["user_id"]),
         content_ciphertext=req.ciphertext,
         nonce=req.nonce,
         digest=req.digest,
     )
+
+    #Record on blockchain (in background)
+    def anchor():
+        try:
+            tx_hash = record_digest_on_chain(req.digest)
+            crud.update_blockchain_tx_hash(str(msg["message_id"]), tx_hash)
+        except Exception as e:
+            print(f"[Blockchain] Failed to anchor message {msg['message_id']}: {e}")
+
+            _executor.submit(anchor)
+            
     return {"status": "queued"}
 
 @app.get("/api/messages")
