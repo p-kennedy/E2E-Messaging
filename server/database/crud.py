@@ -1,3 +1,5 @@
+import json
+
 from connection import DBConnection
 
 
@@ -57,6 +59,73 @@ def update_user_public_key(user_id: str, new_public_key: str) -> bool:
         )
         conn.commit()
         return cur.rowcount > 0
+
+
+def get_prekey_bundle_with_opk(username: str) -> dict | None:
+    """Return the user's public prekey bundle and atomically remove one OPK.
+
+    Uses SELECT FOR UPDATE so concurrent requests can't hand the same OPK to two callers.
+    Returns None if the user doesn't exist.  opk_pub/opk_id are None if no OPKs remain.
+    """
+    with DBConnection() as (conn, cur):
+        cur.execute(
+            "SELECT user_id, public_key FROM users WHERE username = %s FOR UPDATE",
+            (username,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+
+        bundle = json.loads(row["public_key"])
+        opk_pubs = bundle.get("opk_pubs", [])
+
+        opk = opk_pubs.pop(0) if opk_pubs else None
+
+        if opk is not None:
+            bundle["opk_pubs"] = opk_pubs
+            cur.execute(
+                "UPDATE users SET public_key = %s WHERE user_id = %s",
+                (json.dumps(bundle), row["user_id"]),
+            )
+            conn.commit()
+
+        return {
+            "ik_sign_pub":   bundle["ik_sign_pub"],
+            "ik_dh_pub":     bundle["ik_dh_pub"],
+            "spk_pub":       bundle["spk_pub"],
+            "spk_signature": bundle["spk_signature"],
+            "opk_pub":       opk["key"] if opk else None,
+            "opk_id":        opk["id"]  if opk else None,
+        }
+
+
+def get_opk_count(user_id: str) -> int:
+    with DBConnection() as (_, cur):
+        cur.execute("SELECT public_key FROM users WHERE user_id = %s", (user_id,))
+        row = cur.fetchone()
+        if not row:
+            return 0
+        return len(json.loads(row["public_key"]).get("opk_pubs", []))
+
+
+def append_one_time_prekeys(user_id: str, new_opks: list[dict]) -> int:
+    """Append new OPKs to the user's bundle. Returns the new total count."""
+    with DBConnection() as (conn, cur):
+        cur.execute(
+            "SELECT public_key FROM users WHERE user_id = %s FOR UPDATE",
+            (user_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return 0
+        bundle = json.loads(row["public_key"])
+        bundle["opk_pubs"].extend(new_opks)
+        cur.execute(
+            "UPDATE users SET public_key = %s WHERE user_id = %s",
+            (json.dumps(bundle), user_id),
+        )
+        conn.commit()
+        return len(bundle["opk_pubs"])
 
 
 def delete_user(user_id: str) -> bool:

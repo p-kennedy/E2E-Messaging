@@ -1,7 +1,8 @@
-// Unit tests for User_Creation/userCreate.js — crypto operations only, no server required.
+// Unit tests for account.js and session.js — crypto operations only, no server required.
 // Run from the repo root:  node tests/test_create_user.js
 
-import { PrivateKey, deriveKek, createUser } from '../client/user_creation/userCreate.js';
+import { PrivateKey, deriveKek, createUser } from '../client/user_creation/account.js';
+import { x3dhSend } from '../client/user_creation/session.js';
 import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
 import { existsSync, unlinkSync, readFileSync } from 'node:fs';
 
@@ -140,6 +141,86 @@ try {
 
     pass('createUser writes private_keys.bin and local_salt.bin');
 } catch (e) { fail('createUser local file writes', e); }
+
+// --- Test 8: x3dhSend (4DH) returns correct output shape ---
+try {
+    const initiatorIkDh = PrivateKey.generate();
+    const responderIkDh = PrivateKey.generate();
+    const responderSpk  = PrivateKey.generate();
+    const responderOpk  = PrivateKey.generate();
+
+    const spkSig = PrivateKey.generate().sign(responderSpk.getPublicKey().serialize());
+
+    const bundle = {
+        ikDhPublic:  responderIkDh.getPublicKey(),
+        spkPublic:   responderSpk.getPublicKey(),
+        spkSignature: spkSig,
+        opkPublic:   responderOpk.getPublicKey(),
+        opkId: 7,
+    };
+
+    const { rootKey, ephPublic, opkId } = x3dhSend({ ikDhPrivate: initiatorIkDh }, bundle);
+
+    if (rootKey.length !== 32) throw new Error(`rootKey: expected 32 bytes, got ${rootKey.length}`);
+    if (ephPublic.serialize().length !== 33) throw new Error('ephPublic: expected 33-byte Signal key');
+    if (opkId !== 7) throw new Error(`opkId: expected 7, got ${opkId}`);
+
+    pass('x3dhSend (4DH): rootKey=32 bytes, ephPublic=33 bytes, opkId preserved');
+} catch (e) { fail('x3dhSend 4DH shape', e); }
+
+// --- Test 9: x3dhSend (3DH) — no OPK, opkId is null ---
+try {
+    const initiatorIkDh = PrivateKey.generate();
+    const bundle = {
+        ikDhPublic: PrivateKey.generate().getPublicKey(),
+        spkPublic:  PrivateKey.generate().getPublicKey(),
+        opkPublic:  null,
+        opkId:      null,
+    };
+
+    const { rootKey, opkId } = x3dhSend({ ikDhPrivate: initiatorIkDh }, bundle);
+
+    if (rootKey.length !== 32) throw new Error(`rootKey: expected 32 bytes, got ${rootKey.length}`);
+    if (opkId !== null) throw new Error('opkId should be null for 3DH path');
+
+    pass('x3dhSend (3DH): rootKey=32 bytes, opkId=null');
+} catch (e) { fail('x3dhSend 3DH shape', e); }
+
+// --- Test 10: two x3dhSend calls produce different root keys (ephemeral randomness) ---
+try {
+    const initiatorIkDh = PrivateKey.generate();
+    const bundle = {
+        ikDhPublic: PrivateKey.generate().getPublicKey(),
+        spkPublic:  PrivateKey.generate().getPublicKey(),
+        opkPublic:  PrivateKey.generate().getPublicKey(),
+        opkId: 0,
+    };
+
+    const { rootKey: rk1 } = x3dhSend({ ikDhPrivate: initiatorIkDh }, bundle);
+    const { rootKey: rk2 } = x3dhSend({ ikDhPrivate: initiatorIkDh }, bundle);
+
+    if (Buffer.from(rk1).equals(Buffer.from(rk2))) throw new Error('root keys should differ across calls');
+
+    pass('x3dhSend: distinct root keys across calls (ephemeral randomness)');
+} catch (e) { fail('x3dhSend ephemeral randomness', e); }
+
+// --- Test 11: 3DH and 4DH paths produce different root keys ---
+try {
+    const initiatorIkDh = PrivateKey.generate();
+    const responderIkDh = PrivateKey.generate();
+    const responderSpk  = PrivateKey.generate();
+    const responderOpk  = PrivateKey.generate();
+
+    const bundleWith    = { ikDhPublic: responderIkDh.getPublicKey(), spkPublic: responderSpk.getPublicKey(), opkPublic: responderOpk.getPublicKey(), opkId: 0 };
+    const bundleWithout = { ikDhPublic: responderIkDh.getPublicKey(), spkPublic: responderSpk.getPublicKey(), opkPublic: null, opkId: null };
+
+    const { rootKey: rk4 } = x3dhSend({ ikDhPrivate: initiatorIkDh }, bundleWith);
+    const { rootKey: rk3 } = x3dhSend({ ikDhPrivate: initiatorIkDh }, bundleWithout);
+
+    if (Buffer.from(rk4).equals(Buffer.from(rk3))) throw new Error('3DH and 4DH root keys should differ');
+
+    pass('x3dhSend: 3DH and 4DH paths produce different root keys');
+} catch (e) { fail('x3dhSend 3DH vs 4DH', e); }
 
 // --- Cleanup ---
 for (const f of [`${TEST_USERNAME}_private_keys.bin`, `${TEST_USERNAME}_local_salt.bin`]) {

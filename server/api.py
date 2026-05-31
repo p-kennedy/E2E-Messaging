@@ -37,6 +37,9 @@ class SendMessageRequest(BaseModel):
     nonce: str
     digest: str
 
+class UploadOpksRequest(BaseModel):
+    opk_pubs: list[dict]
+
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
 
@@ -73,6 +76,23 @@ def login(req: LoginRequest):
     if not user or not pwd_context.verify(req.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return {"token": make_token(str(user["user_id"]))}
+
+@app.get("/api/users/me/opk-count")
+def opk_count(user_id: str = Depends(get_current_user)):
+    return {"count": crud.get_opk_count(user_id)}
+
+@app.post("/api/users/me/opks", status_code=201)
+def upload_opks(req: UploadOpksRequest, user_id: str = Depends(get_current_user)):
+    new_total = crud.append_one_time_prekeys(user_id, req.opk_pubs)
+    return {"total": new_total}
+
+@app.get("/api/users/{username}/prekey-bundle")
+def get_prekey_bundle(username: str, _: str = Depends(get_current_user)):
+    bundle = crud.get_prekey_bundle_with_opk(username)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return bundle
+
 
 @app.post("/api/messages", status_code=201)
 def send_message(req: SendMessageRequest, user_id: str = Depends(get_current_user)):

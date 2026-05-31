@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "create-user": "node userCreate.js"
+    "account": "node account.js"
   },
   "dependencies": {
     "@signalapp/libsignal-client": "^0.67.0",
