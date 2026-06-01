@@ -185,10 +185,32 @@ export async function login(username, password) {
 
     const opkPrivates = [];
     for (let offset = 96; offset < privateBundle.length; offset += 32) {
-        opkPrivates.push(PrivateKey.deserialize(privateBundle.subarray(offset, offset + 32)));
+        const bytes = privateBundle.subarray(offset, offset + 32);
+        opkPrivates.push(bytes.every(b => b === 0) ? null : PrivateKey.deserialize(bytes));
     }
 
     return { token, keys: { ikSignPrivate, ikDhPrivate, spkPrivate, opkPrivates } };
+}
+
+// Zeroes the 32-byte private key for the given OPK ID in the encrypted key file.
+// Call this after a successful X3DH session establishment to ensure the OPK is never reused.
+export async function deleteConsumedOpk(username, password, opkId) {
+    const localSalt = readFileSync(`${username}_local_salt.bin`);
+    const keyFile   = readFileSync(`${username}_private_keys.bin`);
+    const kek       = await deriveKek(Buffer.from(password, 'utf8'), localSalt);
+    const privateBundle = aesGcmDecrypt(kek, keyFile.subarray(0, 12), keyFile.subarray(12));
+
+    const offset = 96 + opkId * 32;
+    if (offset + 32 > privateBundle.length) {
+        throw new Error(`OPK id ${opkId} out of range`);
+    }
+    privateBundle.fill(0, offset, offset + 32);
+
+    const newNonce = randomBytes(12);
+    writeFileSync(
+        `${username}_private_keys.bin`,
+        Buffer.concat([newNonce, aesGcmEncrypt(kek, newNonce, privateBundle)]),
+    );
 }
 
 // Fetches messages from the server and triggers OPK replenishment in the background.
