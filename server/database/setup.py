@@ -21,10 +21,16 @@ CREATE TABLE IF NOT EXISTS messages (
     recipient_id        UUID        NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     content_ciphertext  VARCHAR     NOT NULL,
     nonce               VARCHAR     NOT NULL,
+    header              TEXT        NOT NULL,
+    signature           VARCHAR     NOT NULL,
     digest              VARCHAR     NOT NULL,
     blockchain_tx_hash  VARCHAR,
     created_at          TIMESTAMP   NOT NULL DEFAULT NOW()
 );
+
+-- Migration for databases created before header/signature columns were added
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS header    TEXT    NOT NULL DEFAULT '';
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS signature VARCHAR NOT NULL DEFAULT '';
 """
 
 

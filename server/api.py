@@ -39,7 +39,12 @@ class SendMessageRequest(BaseModel):
     recipient: str
     ciphertext: str
     nonce: str
+    header: str
+    signature: str
     digest: str
+
+class UploadOpksRequest(BaseModel):
+    opk_pubs: list[dict]
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -78,6 +83,23 @@ def login(req: LoginRequest):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return {"token": make_token(str(user["user_id"]))}
 
+@app.get("/api/users/me/opk-count")
+def opk_count(user_id: str = Depends(get_current_user)):
+    return {"count": crud.get_opk_count(user_id)}
+
+@app.post("/api/users/me/opks", status_code=201)
+def upload_opks(req: UploadOpksRequest, user_id: str = Depends(get_current_user)):
+    new_total = crud.append_one_time_prekeys(user_id, req.opk_pubs)
+    return {"total": new_total}
+
+@app.get("/api/users/{username}/prekey-bundle")
+def get_prekey_bundle(username: str, _: str = Depends(get_current_user)):
+    bundle = crud.get_prekey_bundle_with_opk(username)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return bundle
+
+
 @app.post("/api/messages", status_code=201)
 def send_message(req: SendMessageRequest, user_id: str = Depends(get_current_user)):
     recipient = crud.get_user_by_username(req.recipient)
@@ -90,6 +112,8 @@ def send_message(req: SendMessageRequest, user_id: str = Depends(get_current_use
         recipient_id=str(recipient["user_id"]),
         content_ciphertext=req.ciphertext,
         nonce=req.nonce,
+        header=req.header,
+        signature=req.signature,
         digest=req.digest,
     )
 
@@ -110,13 +134,16 @@ def fetch_messages(user_id: str = Depends(get_current_user)):
     messages = crud.get_messages_for_recipient(user_id)
     return {"messages": [
         {
-            "message_id":  str(m["message_id"]),
-            "sender_id":   str(m["sender_id"]),
-            "recipient_id":str(m["recipient_id"]),
-            "ciphertext":  m["content_ciphertext"],
-            "nonce":       m["nonce"],
-            "digest":      m["digest"],
-            "created_at":  str(m["created_at"]),
+            "message_id":         str(m["message_id"]),
+            "sender_id":          str(m["sender_id"]),
+            "recipient_id":       str(m["recipient_id"]),
+            "ciphertext":         m["content_ciphertext"],
+            "nonce":              m["nonce"],
+            "header":             m["header"],
+            "signature":          m["signature"],
+            "digest":             m["digest"],
+            "blockchain_tx_hash": m["blockchain_tx_hash"],
+            "created_at":         str(m["created_at"]),
         }
         for m in messages
     ]}
