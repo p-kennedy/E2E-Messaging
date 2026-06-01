@@ -144,6 +144,8 @@ def create_message(
     recipient_id: str,
     content_ciphertext: str,
     nonce: str,
+    header: str,
+    signature: str,
     digest: str,
     blockchain_tx_hash: str | None = None,
 ) -> dict:
@@ -151,11 +153,11 @@ def create_message(
         cur.execute(
             """
             INSERT INTO messages
-                (sender_id, recipient_id, content_ciphertext, nonce, digest, blockchain_tx_hash)
-            VALUES (%s, %s, %s, %s, %s, %s)
+                (sender_id, recipient_id, content_ciphertext, nonce, header, signature, digest, blockchain_tx_hash)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
-            (sender_id, recipient_id, content_ciphertext, nonce, digest, blockchain_tx_hash),
+            (sender_id, recipient_id, content_ciphertext, nonce, header, signature, digest, blockchain_tx_hash),
         )
         conn.commit()
         return dict(cur.fetchone())

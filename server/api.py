@@ -35,6 +35,8 @@ class SendMessageRequest(BaseModel):
     recipient: str
     ciphertext: str
     nonce: str
+    header: str
+    signature: str
     digest: str
 
 class UploadOpksRequest(BaseModel):
@@ -104,6 +106,8 @@ def send_message(req: SendMessageRequest, user_id: str = Depends(get_current_use
         recipient_id=str(recipient["user_id"]),
         content_ciphertext=req.ciphertext,
         nonce=req.nonce,
+        header=req.header,
+        signature=req.signature,
         digest=req.digest,
     )
     return {"status": "queued"}
@@ -113,13 +117,16 @@ def fetch_messages(user_id: str = Depends(get_current_user)):
     messages = crud.get_messages_for_recipient(user_id)
     return {"messages": [
         {
-            "message_id":  str(m["message_id"]),
-            "sender_id":   str(m["sender_id"]),
-            "recipient_id":str(m["recipient_id"]),
-            "ciphertext":  m["content_ciphertext"],
-            "nonce":       m["nonce"],
-            "digest":      m["digest"],
-            "created_at":  str(m["created_at"]),
+            "message_id":         str(m["message_id"]),
+            "sender_id":          str(m["sender_id"]),
+            "recipient_id":       str(m["recipient_id"]),
+            "ciphertext":         m["content_ciphertext"],
+            "nonce":              m["nonce"],
+            "header":             m["header"],
+            "signature":          m["signature"],
+            "digest":             m["digest"],
+            "blockchain_tx_hash": m["blockchain_tx_hash"],
+            "created_at":         str(m["created_at"]),
         }
         for m in messages
     ]}

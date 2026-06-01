@@ -2,7 +2,7 @@
 // Run from the repo root:  node tests/test_create_user.js
 
 import { PrivateKey, deriveKek, createUser } from '../client/user_creation/account.js';
-import { x3dhSend } from '../client/user_creation/session.js';
+import { x3dhSend, initRatchet, ratchetEncrypt } from '../client/user_creation/session.js';
 import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
 import { existsSync, unlinkSync, readFileSync } from 'node:fs';
 
@@ -221,6 +221,169 @@ try {
 
     pass('x3dhSend: 3DH and 4DH paths produce different root keys');
 } catch (e) { fail('x3dhSend 3DH vs 4DH', e); }
+
+// --- Test 12: initRatchet returns correct state shape ---
+try {
+    const rootKey      = Buffer.from(Array.from({ length: 32 }, () => Math.floor(Math.random() * 256)));
+    const responderSpk = PrivateKey.generate();
+    const state        = initRatchet(rootKey, responderSpk.getPublicKey());
+
+    if (state.rootKey.length !== 32)           throw new Error(`rootKey: expected 32 bytes, got ${state.rootKey.length}`);
+    if (state.sendingChainKey.length !== 32)   throw new Error(`sendingChainKey: expected 32 bytes`);
+    if (state.receivingChainKey !== null)       throw new Error('receivingChainKey should be null');
+    if (state.ratchetPublic.serialize().length !== 33) throw new Error('ratchetPublic: expected 33-byte Signal key');
+    if (state.Ns !== 0 || state.Nr !== 0 || state.PN !== 0) throw new Error('counters should all be 0');
+
+    pass('initRatchet: correct state shape, counters zeroed, receivingChainKey null');
+} catch (e) { fail('initRatchet state shape', e); }
+
+// --- Test 13: initRatchet advances the root key (KDF_RK mutates RK) ---
+try {
+    const rootKey      = Buffer.from(Array.from({ length: 32 }, () => Math.floor(Math.random() * 256)));
+    const responderSpk = PrivateKey.generate().getPublicKey();
+    const state        = initRatchet(rootKey, responderSpk);
+
+    if (Buffer.from(state.rootKey).equals(rootKey))
+        throw new Error('rootKey should change after KDF_RK step');
+
+    pass('initRatchet: root key advanced by KDF_RK step');
+} catch (e) { fail('initRatchet root key advancement', e); }
+
+// --- Test 14: two initRatchet calls produce different state (ratchet key randomness) ---
+try {
+    const rootKey      = Buffer.alloc(32, 0xab);
+    const responderSpk = PrivateKey.generate().getPublicKey();
+    const s1 = initRatchet(rootKey, responderSpk);
+    const s2 = initRatchet(rootKey, responderSpk);
+
+    if (Buffer.from(s1.sendingChainKey).equals(Buffer.from(s2.sendingChainKey)))
+        throw new Error('sendingChainKey should differ across calls');
+    if (s1.ratchetPublic.serialize().equals(s2.ratchetPublic.serialize()))
+        throw new Error('ratchetPublic should differ across calls');
+
+    pass('initRatchet: distinct state across calls (ratchet key randomness)');
+} catch (e) { fail('initRatchet ratchet key randomness', e); }
+
+// --- Test 15: ratchetEncrypt returns correct output shape ---
+try {
+    const rootKey      = Buffer.alloc(32, 0xab);
+    const responderSpk = PrivateKey.generate();
+    const state        = initRatchet(rootKey, responderSpk.getPublicKey());
+    const ikSign       = PrivateKey.generate();
+
+    const ephPrivate = PrivateKey.generate();
+    const ephPublic  = ephPrivate.getPublicKey();
+    const plaintext  = Buffer.from('hello world', 'utf8');
+
+    const { header, ciphertext, nonce, signature, digest } = ratchetEncrypt(state, plaintext, ikSign, { ephPublic, opkId: 3 });
+
+    if (nonce.length !== 12)                   throw new Error(`nonce: expected 12 bytes, got ${nonce.length}`);
+    if (ciphertext.length < plaintext.length)  throw new Error('ciphertext shorter than plaintext');
+    if (!('ratchetPublic' in header))          throw new Error('header missing ratchetPublic');
+    if (header.Ns !== 0)                       throw new Error(`header.Ns: expected 0 (pre-increment snapshot), got ${header.Ns}`);
+    if (header.PN !== 0)                       throw new Error(`header.PN: expected 0, got ${header.PN}`);
+    if (header.opkId !== 3)                    throw new Error(`header.opkId: expected 3, got ${header.opkId}`);
+    if (!header.ephPublic)                     throw new Error('header missing ephPublic');
+    if (signature.length !== 64)               throw new Error(`signature: expected 64 bytes, got ${signature.length}`);
+    if (!/^0x[0-9a-f]{64}$/.test(digest))     throw new Error(`digest: expected 0x-prefixed 32-byte hex, got ${digest}`);
+
+    pass('ratchetEncrypt: correct output shape (nonce=12, ciphertext, header fields, signature=64, digest=keccak256)');
+} catch (e) { fail('ratchetEncrypt shape', e); }
+
+// --- Test 16: ratchetEncrypt advances Ns and chain key ---
+try {
+    const state  = initRatchet(Buffer.alloc(32, 0xcd), PrivateKey.generate().getPublicKey());
+    const ikSign = PrivateKey.generate();
+    const ck0    = Buffer.from(state.sendingChainKey);
+
+    ratchetEncrypt(state, Buffer.from('msg1'), ikSign);
+    if (state.Ns !== 1) throw new Error(`Ns after 1st call: expected 1, got ${state.Ns}`);
+    if (Buffer.from(state.sendingChainKey).equals(ck0)) throw new Error('chain key unchanged after 1st call');
+
+    const ck1 = Buffer.from(state.sendingChainKey);
+    ratchetEncrypt(state, Buffer.from('msg2'), ikSign);
+    if (state.Ns !== 2) throw new Error(`Ns after 2nd call: expected 2, got ${state.Ns}`);
+    if (Buffer.from(state.sendingChainKey).equals(ck1)) throw new Error('chain key unchanged after 2nd call');
+
+    pass('ratchetEncrypt: Ns increments and chain key advances each call');
+} catch (e) { fail('ratchetEncrypt state mutation', e); }
+
+// --- Test 17: ratchetEncrypt produces distinct ciphertexts for the same plaintext ---
+try {
+    const state     = initRatchet(Buffer.alloc(32, 0xef), PrivateKey.generate().getPublicKey());
+    const ikSign    = PrivateKey.generate();
+    const plaintext = Buffer.from('same message');
+
+    const { ciphertext: ct1, nonce: n1 } = ratchetEncrypt(state, plaintext, ikSign);
+    const { ciphertext: ct2, nonce: n2 } = ratchetEncrypt(state, plaintext, ikSign);
+
+    if (ct1.equals(ct2)) throw new Error('ciphertexts should differ (different message keys)');
+    if (n1.equals(n2))   throw new Error('nonces should differ (random per message)');
+
+    pass('ratchetEncrypt: distinct ciphertexts and nonces across calls');
+} catch (e) { fail('ratchetEncrypt distinct outputs', e); }
+
+// --- Test 18: ratchetEncrypt without ephPublic/opkId omits those header fields ---
+try {
+    const state  = initRatchet(Buffer.alloc(32, 0x12), PrivateKey.generate().getPublicKey());
+    const ikSign = PrivateKey.generate();
+    const { header } = ratchetEncrypt(state, Buffer.from('no opk'), ikSign);
+
+    if ('opkId'     in header) throw new Error('header should not contain opkId');
+    if ('ephPublic' in header) throw new Error('header should not contain ephPublic');
+
+    pass('ratchetEncrypt: ephPublic and opkId absent from header when not provided');
+} catch (e) { fail('ratchetEncrypt optional header fields', e); }
+
+// --- Test 19: digest is a distinct keccak256 per message ---
+try {
+    const ikSign = PrivateKey.generate();
+    const state  = initRatchet(Buffer.alloc(32, 0x78), PrivateKey.generate().getPublicKey());
+
+    const { digest: d1 } = ratchetEncrypt(state, Buffer.from('msg A'), ikSign);
+    const { digest: d2 } = ratchetEncrypt(state, Buffer.from('msg B'), ikSign);
+
+    if (!/^0x[0-9a-f]{64}$/.test(d1)) throw new Error(`d1 not valid hex digest: ${d1}`);
+    if (d1 === d2) throw new Error('digests should differ across messages');
+
+    pass('ratchetEncrypt: keccak256 digest is unique per message');
+} catch (e) { fail('ratchetEncrypt digest uniqueness', e); }
+
+// --- Test 20: signature verifies against sender's identity public key ---
+try {
+    const ikSign = PrivateKey.generate();
+    const state  = initRatchet(Buffer.alloc(32, 0x34), PrivateKey.generate().getPublicKey());
+
+    const { ciphertext, nonce, header, signature } = ratchetEncrypt(
+        state, Buffer.from('verify me'), ikSign,
+    );
+
+    const aad        = Buffer.from(JSON.stringify(header), 'utf8');
+    const signedData = Buffer.concat([ciphertext, nonce, aad]);
+    const valid      = ikSign.getPublicKey().verify(signedData, signature);
+    if (!valid) throw new Error('signature did not verify');
+
+    pass('ratchetEncrypt: signature verifies against sender identity public key');
+} catch (e) { fail('ratchetEncrypt signature verification', e); }
+
+// --- Test 20: tampered ciphertext fails signature verification ---
+try {
+    const ikSign = PrivateKey.generate();
+    const state  = initRatchet(Buffer.alloc(32, 0x56), PrivateKey.generate().getPublicKey());
+
+    const { ciphertext, nonce, header, signature } = ratchetEncrypt(
+        state, Buffer.from('tamper test'), ikSign,
+    );
+
+    const tampered   = Buffer.from(ciphertext);
+    tampered[0]     ^= 0xff;
+    const aad        = Buffer.from(JSON.stringify(header), 'utf8');
+    const signedData = Buffer.concat([tampered, nonce, aad]);
+    const valid      = ikSign.getPublicKey().verify(signedData, signature);
+    if (valid) throw new Error('tampered ciphertext should not verify');
+
+    pass('ratchetEncrypt: tampered ciphertext fails signature verification');
+} catch (e) { fail('ratchetEncrypt tamper detection', e); }
 
 // --- Cleanup ---
 for (const f of [`${TEST_USERNAME}_private_keys.bin`, `${TEST_USERNAME}_local_salt.bin`]) {
