@@ -1,7 +1,12 @@
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
-// The renderer talks to the FastAPI server directly via fetch.
-// Expose platform info only — no node APIs in the renderer.
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
+});
+
+contextBridge.exposeInMainWorld('messagingAPI', {
+  register:      (args) => ipcRenderer.invoke('auth:register', args),
+  login:         (args) => ipcRenderer.invoke('auth:login',    args),
+  sendMessage:   (args) => ipcRenderer.invoke('msg:send',      args),
+  fetchMessages: ()     => ipcRenderer.invoke('msg:fetch'),
 });
