@@ -34,6 +34,10 @@ public:
 
     bool isAuthenticated() const;
 
+    // Inject a previously obtained token (e.g. from the JS layer after login).
+    void setAuthToken(const std::string& token);
+    const std::string& getAuthToken() const;
+
 private:
     std::string m_host;
     int         m_port;

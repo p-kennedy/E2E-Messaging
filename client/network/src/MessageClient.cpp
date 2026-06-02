@@ -74,6 +74,14 @@ bool MessageClient::isAuthenticated() const {
     return !m_authToken.empty();
 }
 
+void MessageClient::setAuthToken(const std::string& token) {
+    m_authToken = token;
+}
+
+const std::string& MessageClient::getAuthToken() const {
+    return m_authToken;
+}
+
 std::string MessageClient::buildRequest(
     const std::string& method,
     const std::string& path,

@@ -1,0 +1,15 @@
+{
+  "name": "messaging-client-native",
+  "version": "0.1.0",
+  "description": "N-API native addon wrapping SecureClientConnection + MessageClient",
+  "scripts": {
+    "build": "cmake-js compile --runtime=electron --runtime-version=32.3.3 --arch=x64",
+    "clean": "cmake-js clean"
+  },
+  "dependencies": {
+    "node-addon-api": "^8.0.0"
+  },
+  "devDependencies": {
+    "cmake-js": "^7.3.0"
+  }
+}
