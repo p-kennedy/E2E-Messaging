@@ -8,51 +8,78 @@ MessageClient::MessageClient(const std::string& host, int port)
     , m_port(port)
 {}
 
+void MessageClient::registerUser(const std::string& username, const std::string& password,
+                                 const std::string& publicKeyJson) {
+    // publicKeyJson is already a JSON string — embed it as a JSON string value
+    // by escaping any inner quotes, then wrap in the outer object.
+    std::string escapedPubKey;
+    escapedPubKey.reserve(publicKeyJson.size());
+    for (char c : publicKeyJson) {
+        if (c == '"')  escapedPubKey += "\\\"";
+        else if (c == '\\') escapedPubKey += "\\\\";
+        else escapedPubKey += c;
+    }
+
+    std::string body = "{\"username\":\"" + username + "\","
+                       "\"password\":\"" + password + "\","
+                       "\"public_key\":\"" + escapedPubKey + "\"}";
+
+    doRequest("POST", "/api/auth/register", body);
+    std::cout << "[Auth] Registered user: " << username << "\n";
+}
+
 void MessageClient::login(const std::string& username, const std::string& password) {
     std::string body = "{\"username\":\"" + username + "\","
                        "\"password\":\"" + password + "\"}";
 
     std::string response = doRequest("POST", "/api/auth/login", body);
 
-    auto start = response.find("\"token\":\"");
-    if (start == std::string::npos)
+    m_authToken = extractJsonString(response, "token");
+    if (m_authToken.empty())
         throw std::runtime_error("Login failed — no token in response");
-    start += 9;
-    auto end = response.find("\"", start);
-    if (end == std::string::npos)
-        throw std::runtime_error("Login failed — malformed token");
 
-    m_authToken = response.substr(start, end - start);
     std::cout << "[Auth] Logged in successfully\n";
 }
 
-void MessageClient::sendMessage(const std::string& recipient, const std::string& ciphertext,
-                                const std::string& nonce, const std::string& digest) {
+void MessageClient::sendMessage(const std::string& recipient,
+                                const std::string& ciphertext,
+                                const std::string& nonce,
+                                const std::string& header,
+                                const std::string& signature,
+                                const std::string& digest) {
     if (!isAuthenticated())
         throw std::runtime_error("Not authenticated — call login() first");
 
-    std::string body = "{\"recipient\":\"" + recipient + "\","
+    // header is a JSON object string — embed it directly (not as a quoted string)
+    // so the server receives it as a proper JSON value.
+    std::string body = "{\"recipient\":\"" + recipient  + "\","
                        "\"ciphertext\":\"" + ciphertext + "\","
                        "\"nonce\":\""      + nonce      + "\","
+                       "\"header\":"       + header     + ","
+                       "\"signature\":\""  + signature  + "\","
                        "\"digest\":\""     + digest     + "\"}";
 
     doRequest("POST", "/api/messages", body);
     std::cout << "[Message] Sent to " << recipient << "\n";
 }
 
-std::vector<Message> MessageClient::fetchMessages() {
+std::string MessageClient::fetchMessages() {
     if (!isAuthenticated())
         throw std::runtime_error("Not authenticated — call login() first");
 
-    std::string response = doRequest("GET", "/api/messages");
-
-    std::vector<Message> messages;
-    std::cout << "[Message] Raw response: " << response << "\n";
-    return messages;
+    return doRequest("GET", "/api/messages");
 }
 
 bool MessageClient::isAuthenticated() const {
     return !m_authToken.empty();
+}
+
+void MessageClient::setAuthToken(const std::string& token) {
+    m_authToken = token;
+}
+
+const std::string& MessageClient::getAuthToken() const {
+    return m_authToken;
 }
 
 std::string MessageClient::buildRequest(
@@ -92,4 +119,17 @@ std::string MessageClient::extractBody(const std::string& httpResponse) const {
     auto pos = httpResponse.find("\r\n\r\n");
     if (pos == std::string::npos) return httpResponse;
     return httpResponse.substr(pos + 4);
+}
+
+// Extracts the string value for a given key from a flat JSON object.
+// Only handles string values (quoted). Returns empty string if not found.
+std::string MessageClient::extractJsonString(const std::string& json,
+                                              const std::string& key) const {
+    const std::string needle = "\"" + key + "\":\"";
+    auto start = json.find(needle);
+    if (start == std::string::npos) return "";
+    start += needle.size();
+    auto end = json.find("\"", start);
+    if (end == std::string::npos) return "";
+    return json.substr(start, end - start);
 }

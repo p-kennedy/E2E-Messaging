@@ -3,6 +3,7 @@
 #include <stdexcept>
 
 int main() {
+    // Keep in sync with SERVER_HOST / SERVER_PORT in client/config.js
     const std::string HOST = "sas.theburkenator.com";
     const int         PORT = 443;
 
@@ -13,11 +14,13 @@ int main() {
 
         client.login("alice", "password123");
 
-        // ciphertext, nonce, and digest will come from the crypto module
-        client.sendMessage("bob", "BASE64_CIPHERTEXT", "BASE64_NONCE", "BASE64_DIGEST");
+        // ciphertext, nonce, header, signature, digest come from the crypto module
+        client.sendMessage("bob", "BASE64_CIPHERTEXT", "BASE64_NONCE",
+                           "{\"ratchetPublic\":\"...\",\"Ns\":0,\"PN\":0}",
+                           "BASE64_SIGNATURE", "0xDIGEST");
 
-        auto messages = client.fetchMessages();
-        std::cout << "Fetched " << messages.size() << " messages\n";
+        std::string rawJson = client.fetchMessages();
+        std::cout << "fetchMessages response: " << rawJson << "\n";
 
     } catch (const std::exception& e) {
         std::cerr << "[ERROR] " << e.what() << "\n";
