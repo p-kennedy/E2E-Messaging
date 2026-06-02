@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { api, getMyUserId } from '../api';
+import { getMyUserId } from '../api';
 import ConversationList from './ConversationList';
 import ChatWindow from './ChatWindow';
 
@@ -41,8 +41,8 @@ export default function ChatApp({ username, onLogout }) {
 
   const loadMessages = useCallback(async () => {
     try {
-      const data = await api.fetchMessages();
-      setReceived(data.messages);
+      const messages = await window.messagingAPI.fetchMessages();
+      setReceived(messages);
     } catch (err) {
       console.error('Failed to poll messages:', err);
     }

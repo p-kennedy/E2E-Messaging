@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { api } from '../api';
 
 export default function ChatWindow({ recipient, displayName, messages, username, onSentMessage, onRefresh }) {
   const [text, setText] = useState('');
@@ -34,13 +33,12 @@ export default function ChatWindow({ recipient, displayName, messages, username,
     setSending(true);
     setError('');
     try {
-      // TODO: replace ciphertext with real E2E-encrypted payload once crypto layer is integrated
-      await api.sendMessage(recipient, trimmed, '', '');
+      await window.messagingAPI.sendMessage({ recipient, plaintext: trimmed });
       onSentMessage({
         message_id: crypto.randomUUID(),
         recipient,
         sender_id: username,
-        ciphertext: trimmed,
+        plaintext: trimmed,
         created_at: new Date().toISOString(),
       });
       setText('');
@@ -69,7 +67,7 @@ export default function ChatWindow({ recipient, displayName, messages, username,
           const mine = msg.direction === 'sent' || msg.sender_id === username;
           return (
             <div key={msg.message_id} className={`bubble ${mine ? 'mine' : 'theirs'}`}>
-              <span className="bubble-text">{msg.ciphertext}</span>
+              <span className="bubble-text">{msg.plaintext}</span>
               <time className="bubble-time">
                 {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </time>

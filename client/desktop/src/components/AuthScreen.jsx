@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { api } from '../api';
 
 export default function AuthScreen({ onLogin }) {
   const [mode, setMode] = useState('login');
@@ -14,10 +13,9 @@ export default function AuthScreen({ onLogin }) {
     setLoading(true);
     try {
       if (mode === 'register') {
-        // TODO: generate real keypair for E2E encryption and pass real public key
-        await api.register(username, password, 'placeholder-public-key');
+        await window.messagingAPI.register({ username, password });
       }
-      const { token } = await api.login(username, password);
+      const { token } = await window.messagingAPI.login({ username, password });
       onLogin(token, username);
     } catch (err) {
       setError(err.message);
