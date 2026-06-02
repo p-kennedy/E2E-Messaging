@@ -1,4 +1,6 @@
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// VITE_API_URL is set in client/desktop/.env (dev) or the build environment (prod).
+// Keep its value in sync with SERVER_URL in client/config.js.
+const BASE_URL = import.meta.env.VITE_API_URL;
 
 function getToken() {
   return localStorage.getItem('authToken');

@@ -3,6 +3,7 @@
 #include <stdexcept>
 
 int main() {
+    // Keep in sync with SERVER_HOST / SERVER_PORT in client/config.js
     const std::string HOST = "sas.theburkenator.com";
     const int         PORT = 443;
 

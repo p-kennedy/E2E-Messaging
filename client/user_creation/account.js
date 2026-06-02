@@ -4,11 +4,15 @@ import argon2 from 'argon2';
 import { writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
+import { SERVER_URL as DEFAULT_SERVER_URL } from '../config.js';
 
 // Re-exported for use by tests without requiring a separate install
 export { PrivateKey, PublicKey };
 
-const SERVER_URL = process.env.SERVER_URL ?? 'http://localhost:8000';
+// Prefer an explicit env override; fall back to the value in config.js.
+// In Electron, main.js sets process.env.SERVER_URL before importing this module.
+// In the standalone CLI, config.js resolves the production URL automatically.
+const SERVER_URL = process.env.SERVER_URL ?? DEFAULT_SERVER_URL;
 
 // Key files are written to KEY_STORE_DIR when set (Electron sets this to
 // app.getPath('userData') before importing this module), otherwise CWD.
