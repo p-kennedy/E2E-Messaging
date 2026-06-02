@@ -2,12 +2,20 @@ import { PrivateKey, PublicKey } from '@signalapp/libsignal-client';
 import { randomBytes, createCipheriv, createDecipheriv, createHash } from 'node:crypto';
 import argon2 from 'argon2';
 import { writeFileSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 
 // Re-exported for use by tests without requiring a separate install
 export { PrivateKey, PublicKey };
 
 const SERVER_URL = process.env.SERVER_URL ?? 'http://localhost:8000';
+
+// Key files are written to KEY_STORE_DIR when set (Electron sets this to
+// app.getPath('userData') before importing this module), otherwise CWD.
+function keyPath(filename) {
+    const dir = process.env.KEY_STORE_DIR;
+    return dir ? join(dir, filename) : filename;
+}
 const NUM_ONE_TIME_PREKEYS = 100;
 const OPK_REPLENISH_THRESHOLD = 20;  // replenish when server count drops below this
 
@@ -74,8 +82,8 @@ export async function createUser(username, password) {
     const encryptedBundle = aesGcmEncrypt(kek, nonce, privateBundle);
 
     // Persist locally — nonce prepended to ciphertext+tag
-    writeFileSync(`${username}_private_keys.bin`, Buffer.concat([nonce, encryptedBundle]));
-    writeFileSync(`${username}_local_salt.bin`, localSalt);
+    writeFileSync(keyPath(`${username}_private_keys.bin`), Buffer.concat([nonce, encryptedBundle]));
+    writeFileSync(keyPath(`${username}_local_salt.bin`), localSalt);
 
     // Public prekey bundle — uploaded so others can initiate X3DH sessions with this user
     const prekeyBundle = {
@@ -137,7 +145,7 @@ async function _replenish(username, kek, token, privateBundle) {
     const extended = Buffer.concat([privateBundle, ...newOpkPairs.map(k => k.serialize())]);
     const newNonce = randomBytes(12);
     writeFileSync(
-        `${username}_private_keys.bin`,
+        keyPath(`${username}_private_keys.bin`),
         Buffer.concat([newNonce, aesGcmEncrypt(kek, newNonce, extended)]),
     );
 
@@ -148,8 +156,8 @@ async function _replenish(username, kek, token, privateBundle) {
 // Public replenishment entry point for use outside of login (e.g. after fetching messages).
 // Reads and re-encrypts the key file independently — call whenever OPK depletion may have occurred.
 export async function replenishOpksIfNeeded(username, password, token) {
-    const localSalt   = readFileSync(`${username}_local_salt.bin`);
-    const keyFile     = readFileSync(`${username}_private_keys.bin`);
+    const localSalt   = readFileSync(keyPath(`${username}_local_salt.bin`));
+    const keyFile     = readFileSync(keyPath(`${username}_private_keys.bin`));
     const kek         = await deriveKek(Buffer.from(password, 'utf8'), localSalt);
     const privateBundle = aesGcmDecrypt(kek, keyFile.subarray(0, 12), keyFile.subarray(12));
     await _replenish(username, kek, token, privateBundle);
@@ -169,8 +177,8 @@ export async function login(username, password) {
 
     const { token } = await response.json();
 
-    const localSalt = readFileSync(`${username}_local_salt.bin`);
-    const keyFile   = readFileSync(`${username}_private_keys.bin`);
+    const localSalt = readFileSync(keyPath(`${username}_local_salt.bin`));
+    const keyFile   = readFileSync(keyPath(`${username}_private_keys.bin`));
     const kek       = await deriveKek(Buffer.from(password, 'utf8'), localSalt);
 
     const nonce          = keyFile.subarray(0, 12);
@@ -195,8 +203,8 @@ export async function login(username, password) {
 // Zeroes the 32-byte private key for the given OPK ID in the encrypted key file.
 // Call this after a successful X3DH session establishment to ensure the OPK is never reused.
 export async function deleteConsumedOpk(username, password, opkId) {
-    const localSalt = readFileSync(`${username}_local_salt.bin`);
-    const keyFile   = readFileSync(`${username}_private_keys.bin`);
+    const localSalt = readFileSync(keyPath(`${username}_local_salt.bin`));
+    const keyFile   = readFileSync(keyPath(`${username}_private_keys.bin`));
     const kek       = await deriveKek(Buffer.from(password, 'utf8'), localSalt);
     const privateBundle = aesGcmDecrypt(kek, keyFile.subarray(0, 12), keyFile.subarray(12));
 
@@ -208,7 +216,7 @@ export async function deleteConsumedOpk(username, password, opkId) {
 
     const newNonce = randomBytes(12);
     writeFileSync(
-        `${username}_private_keys.bin`,
+        keyPath(`${username}_private_keys.bin`),
         Buffer.concat([newNonce, aesGcmEncrypt(kek, newNonce, privateBundle)]),
     );
 }
@@ -290,7 +298,7 @@ function fingerprint(pubKey) {
 // derived from public keys, but the file does reveal your contact list).
 export function verifyIdentity(ownerUsername, contactUsername, ikSignPublic) {
     const live = fingerprint(ikSignPublic);
-    const contactsPath = `${ownerUsername}_contacts.json`;
+    const contactsPath = keyPath(`${ownerUsername}_contacts.json`);
 
     let contacts = {};
     try {
