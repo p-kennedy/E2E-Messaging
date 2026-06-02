@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "vite build",
-    "package": "vite build && electron-builder"
+    "rebuild-native": "electron-rebuild -f -w @signalapp/libsignal-client",
+    "package": "vite build && electron-builder",
+    "postinstall": "electron-rebuild -f -w @signalapp/libsignal-client"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -17,6 +19,7 @@
     "concurrently": "^8.2.2",
     "electron": "^32.0.0",
     "electron-builder": "^25.0.5",
+    "electron-rebuild": "^3.2.9",
     "vite": "^5.4.0",
     "wait-on": "^7.2.0"
   },
@@ -24,7 +27,14 @@
     "appId": "com.e2emessaging.desktop",
     "productName": "E2E Messenger",
     "files": ["dist/**", "electron/**"],
+    "extraResources": [
+      {
+        "from": "../network/build/Release/messaging_client.node",
+        "to": "."
+      }
+    ],
     "directories": { "output": "release" },
+    "npmRebuild": true,
     "linux": { "target": "AppImage" },
     "mac": { "target": "dmg" },
     "win": { "target": "nsis" }
