@@ -304,8 +304,12 @@ ipcMain.handle('msg:fetch', async () => {
   store.saveSessions(username, kek, sessions);
 
   if (decrypted.length > 0) {
-    receivedLog.push(...decrypted);
-    store.saveReceivedLog(username, kek, receivedLog);
+    const existingIds = new Set(receivedLog.map(m => m.message_id));
+    const fresh = decrypted.filter(m => !existingIds.has(m.message_id));
+    if (fresh.length > 0) {
+      receivedLog.push(...fresh);
+      store.saveReceivedLog(username, kek, receivedLog);
+    }
   }
 
   // Delete successfully decrypted messages from the server.

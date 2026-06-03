@@ -59,7 +59,10 @@ export default function ChatApp({ username, onLogout }) {
     async function init() {
       try {
         const history = await window.messagingAPI.fetchReceivedMessages();
-        if (history.length > 0) setReceived(history);
+        if (history.length > 0) {
+          const seen = new Set();
+          setReceived(history.filter(m => seen.has(m.message_id) ? false : seen.add(m.message_id)));
+        }
       } catch (err) {
         console.error('Failed to load received history:', err);
       }
