@@ -163,7 +163,7 @@ def fetch_messages(user_id: str = Depends(get_current_user)):
             "signature":          m["signature"],
             "digest":             m["digest"],
             "blockchain_tx_hash": m["blockchain_tx_hash"],
-            "created_at":         str(m["created_at"]),
+            "created_at":         m["created_at"].strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z",
         }
         for m in messages
     ]}
