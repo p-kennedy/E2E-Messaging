@@ -26,8 +26,15 @@ sudo apt-get update -qq
 sudo apt-get install -y \
     build-essential cmake libssl-dev pkg-config \
     python3 python3-pip python3-venv \
-    docker.io docker-compose-plugin \
+    docker.io \
     curl
+
+# Install docker-compose: try the plugin package first, fall back to pip
+if ! sudo apt-get install -y docker-compose-plugin 2>/dev/null; then
+    echo "[docker-compose-plugin not in apt repos — installing via pip]"
+    pip3 install --user docker-compose
+    export PATH="$HOME/.local/bin:$PATH"
+fi
 
 # Ensure Docker is running and the current user can use it
 sudo systemctl enable --now docker
