@@ -178,9 +178,9 @@ export function ratchetEncrypt(state, plaintext, ikSignPrivate, { ephPublic = nu
     const signedData = Buffer.concat([ciphertext, nonce, aad]);
     const signature  = ikSignPrivate.sign(signedData);
 
-    // Keccak256 commitment over the full authenticated package — submitted to the
-    // smart contract so the server cannot silently drop or alter messages.
-    const digest = keccak256(Buffer.concat([ciphertext, nonce, aad, signature]));
+    // Keccak256 commitment over the plaintext — anchored on-chain so the verify
+    // page can recompute the hash from the original message content.
+    const digest = keccak256(plaintext);
 
     return { header, ciphertext, nonce, signature, digest };
 }
