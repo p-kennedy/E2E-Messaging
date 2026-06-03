@@ -6,11 +6,17 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 import jwt
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+import json
+from typing import Any, Union
 from pydantic import BaseModel
 from passlib.context import CryptContext
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from blockchain_service import record_digest_on_chain, get_record_by_tx, get_record_by_digest
 from concurrent.futures import ThreadPoolExecutor
 
@@ -19,13 +25,30 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "database"))
 from connection import init_pool
 import crud
 
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET is not set — copy .env.example to .env and fill in a value")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRY_HOURS = 24
+
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 security = HTTPBearer()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-JWT_SECRET = os.getenv("JWT_SECRET", "change-me-in-production")
-JWT_ALGORITHM = "HS256"
-JWT_EXPIRY_HOURS = 24
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -43,7 +66,7 @@ class SendMessageRequest(BaseModel):
     recipient: str
     ciphertext: str
     nonce: str
-    header: str
+    header: Union[str, dict]
     signature: str
     digest: str
 
@@ -56,7 +79,7 @@ class UploadOpksRequest(BaseModel):
 def make_token(user_id: str) -> str:
     payload = {
         "sub": user_id,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=JWT_EXPIRY_HOURS),
+        "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=JWT_EXPIRY_HOURS),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -73,7 +96,8 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.post("/api/auth/register", status_code=201)
-def register(req: RegisterRequest):
+@limiter.limit("3/minute")
+def register(request: Request, req: RegisterRequest):
     if crud.get_user_by_username(req.username):
         raise HTTPException(status_code=409, detail="Username already taken")
     password_hash = pwd_context.hash(req.password)
@@ -81,7 +105,8 @@ def register(req: RegisterRequest):
     return {"user_id": str(user["user_id"]), "username": user["username"]}
 
 @app.post("/api/auth/login")
-def login(req: LoginRequest):
+@limiter.limit("5/minute")
+def login(request: Request, req: LoginRequest):
     user = crud.get_user_by_username(req.username)
     if not user or not pwd_context.verify(req.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -111,12 +136,13 @@ def send_message(req: SendMessageRequest, user_id: str = Depends(get_current_use
         raise HTTPException(status_code=404, detail="Recipient not found")
 
     # Save msg to DB first
+    header_str = json.dumps(req.header) if isinstance(req.header, dict) else req.header
     msg = crud.create_message(
         sender_id=user_id,
         recipient_id=str(recipient["user_id"]),
         content_ciphertext=req.ciphertext,
         nonce=req.nonce,
-        header=req.header,
+        header=header_str,
         signature=req.signature,
         digest=req.digest,
     )
@@ -131,8 +157,18 @@ def send_message(req: SendMessageRequest, user_id: str = Depends(get_current_use
 
     print(f"[Blockchain] Submitting anchor job for message {msg['message_id']}")
     _executor.submit(anchor)
-            
-    return {"status": "queued"}
+
+    return {"status": "queued", "message_id": str(msg["message_id"])}
+
+@app.delete("/api/messages/{message_id}", status_code=204)
+def delete_message_endpoint(message_id: str, user_id: str = Depends(get_current_user)):
+    msg = crud.get_message_by_id(message_id)
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if str(msg["sender_id"]) != user_id and str(msg["recipient_id"]) != user_id:
+        raise HTTPException(status_code=403, detail="Not authorised")
+    crud.delete_message(message_id)
+
 
 @app.get("/api/messages")
 def fetch_messages(user_id: str = Depends(get_current_user)):
@@ -141,6 +177,7 @@ def fetch_messages(user_id: str = Depends(get_current_user)):
         {
             "message_id":         str(m["message_id"]),
             "sender_id":          str(m["sender_id"]),
+            "sender_username":    m["sender_username"],
             "recipient_id":       str(m["recipient_id"]),
             "ciphertext":         m["content_ciphertext"],
             "nonce":              m["nonce"],
@@ -148,7 +185,7 @@ def fetch_messages(user_id: str = Depends(get_current_user)):
             "signature":          m["signature"],
             "digest":             m["digest"],
             "blockchain_tx_hash": m["blockchain_tx_hash"],
-            "created_at":         str(m["created_at"]),
+            "created_at":         m["created_at"].strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z",
         }
         for m in messages
     ]}

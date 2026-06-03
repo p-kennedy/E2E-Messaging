@@ -132,3 +132,43 @@ export function saveSessions(username, kek, sessions) {
     const blob = encrypt(kek, Buffer.from(JSON.stringify(raw), 'utf8'));
     writeFileSync(keyPath(`${username}_sessions.bin`), blob);
 }
+
+// ── Sent log ──────────────────────────────────────────────────────────────────
+// Stores { message_id, recipient, plaintext, created_at }[] encrypted with the KEK.
+
+export function loadSentLog(username, kek) {
+    const p = keyPath(`${username}_sent_log.bin`);
+    if (!existsSync(p)) return [];
+    try {
+        return JSON.parse(decrypt(kek, readFileSync(p)).toString('utf8'));
+    } catch {
+        return [];
+    }
+}
+
+export function saveSentLog(username, kek, log) {
+    writeFileSync(
+        keyPath(`${username}_sent_log.bin`),
+        encrypt(kek, Buffer.from(JSON.stringify(log), 'utf8')),
+    );
+}
+
+// ── Received log ──────────────────────────────────────────────────────────────
+// Stores { message_id, sender_id, sender_username, plaintext, created_at }[] encrypted with the KEK.
+
+export function loadReceivedLog(username, kek) {
+    const p = keyPath(`${username}_received_log.bin`);
+    if (!existsSync(p)) return [];
+    try {
+        return JSON.parse(decrypt(kek, readFileSync(p)).toString('utf8'));
+    } catch {
+        return [];
+    }
+}
+
+export function saveReceivedLog(username, kek, log) {
+    writeFileSync(
+        keyPath(`${username}_received_log.bin`),
+        encrypt(kek, Buffer.from(JSON.stringify(log), 'utf8')),
+    );
+}

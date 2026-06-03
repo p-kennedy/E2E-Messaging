@@ -7,12 +7,22 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_compile_options(-Wall -Wextra -Wpedantic -Wshadow -Wno-unused-parameter)
 
+if(APPLE)
+    execute_process(
+        COMMAND brew --prefix openssl
+        OUTPUT_VARIABLE OPENSSL_ROOT_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    message(STATUS "macOS: Homebrew OpenSSL at ${OPENSSL_ROOT_DIR}")
+endif()
+
 find_package(OpenSSL 1.1.1 REQUIRED)
 message(STATUS "OpenSSL version: ${OPENSSL_VERSION}")
 
 add_library(client_lib
     src/SecureClientConnection.cpp
     src/MessageClient.cpp
+    src/MessageStore.cpp
 )
 
 target_include_directories(client_lib
@@ -23,6 +33,9 @@ target_include_directories(client_lib
 target_link_libraries(client_lib
     PUBLIC OpenSSL::SSL OpenSSL::Crypto
 )
+
+# Required when client_lib is linked into the shared .node addon.
+set_target_properties(client_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_executable(secure_client src/main.cpp)
 target_link_libraries(secure_client PRIVATE client_lib)

@@ -138,8 +138,8 @@ void SecureServerConnection::initSSLContext() {
     if (!m_ctx)
         throw std::runtime_error("SSL_CTX_new failed: " + tlsGetError());
 
-    SSL_CTX_set_min_proto_version(m_ctx, TLS1_3_VERSION);
-    SSL_CTX_set_max_proto_version(m_ctx, TLS1_3_VERSION);
+    SSL_CTX_set_min_proto_version(m_ctx, TLS1_2_VERSION);
+    SSL_CTX_set_max_proto_version(m_ctx, TLS1_2_VERSION);
 
     if (SSL_CTX_use_certificate_file(m_ctx, m_certPath.c_str(), SSL_FILETYPE_PEM) <= 0) {
         SSL_CTX_free(m_ctx);

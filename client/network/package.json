@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "N-API native addon wrapping SecureClientConnection + MessageClient",
   "scripts": {
-    "build": "cmake-js compile --runtime=electron --runtime-version=32.3.3 --arch=x64",
+    "build": "cmake-js compile --runtime=electron --runtime-version=32.3.3",
     "clean": "cmake-js clean"
   },
   "dependencies": {

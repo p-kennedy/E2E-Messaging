@@ -57,38 +57,21 @@ server/network/build/secure_server <cert.pem> <key.pem> <port>
 
 ## Client setup
 
-**1. Install C++ build dependencies**
+**1. Run the client setup script**
 
 ```bash
-./client/network/install_deps.sh
+./client/setup.sh
 ```
 
-**2. Build the C++ native addon**
+This installs all dependencies (crypto modules, C++ native addon, desktop app), builds the N-API addon against Electron's ABI, and runs `electron-rebuild` for native modules.
 
-```bash
-cd client/network
-npm install
-npm run build
-cd ../..
-```
-
-**3. Install desktop app dependencies**
-
-```bash
-cd client/desktop
-npm install
-cd ../..
-```
-
-`npm install` runs `electron-rebuild` automatically to recompile `@signalapp/libsignal-client` against the bundled Electron version.
-
-**4. Configure the API URL**
+**2. Configure the API URL**
 
 ```bash
 cp client/desktop/.env.example client/desktop/.env
 ```
 
-For local development the default (`http://localhost:8000`) is correct. For production, change `VITE_API_URL` to match `SERVER_URL` in `client/config.js`.
+For local development the default (`http://localhost:8000`) is correct. For production, set `VITE_API_URL` to the server address.
 
 ---
 
@@ -107,7 +90,7 @@ This starts the Vite dev server and launches the Electron window. The app is rea
 
 ```
 client/
-  config.js          # central server host/port config
+  config.mjs         # central server host/port config
   network/           # C++ TLS client (SecureClientConnection + MessageClient + N-API addon)
   user_creation/     # crypto modules: X3DH, Double Ratchet, key storage
   desktop/           # Electron + React UI

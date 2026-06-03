@@ -90,6 +90,7 @@ def get_prekey_bundle_with_opk(username: str) -> dict | None:
             conn.commit()
 
         return {
+            "user_id":       str(row["user_id"]),
             "ik_sign_pub":   bundle["ik_sign_pub"],
             "ik_dh_pub":     bundle["ik_dh_pub"],
             "spk_pub":       bundle["spk_pub"],
@@ -173,7 +174,13 @@ def get_message_by_id(message_id: str) -> dict | None:
 def get_messages_for_recipient(recipient_id: str) -> list[dict]:
     with DBConnection() as (_, cur):
         cur.execute(
-            "SELECT * FROM messages WHERE recipient_id = %s ORDER BY created_at ASC",
+            """
+            SELECT m.*, u.username AS sender_username
+            FROM messages m
+            JOIN users u ON u.user_id = m.sender_id
+            WHERE m.recipient_id = %s
+            ORDER BY m.created_at ASC
+            """,
             (recipient_id,),
         )
         return [dict(r) for r in cur.fetchall()]

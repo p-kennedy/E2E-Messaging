@@ -48,3 +48,7 @@ node_modules/
 
 # Snapshot cheatcodes output
 /snapshots
+
+# C++ build output (client and server network modules)
+client/network/build/
+server/network/build/
