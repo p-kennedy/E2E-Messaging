@@ -1,3 +1,8 @@
+// Allow self-signed certs in development (tunnel to university VM)
+if (process.env.NODE_ENV !== 'production') {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
+
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { readFileSync } = require('fs');
@@ -56,7 +61,7 @@ app.whenReady().then(async () => {
   addon = require(addonPath);
 
   // Dynamically import ESM modules (main.js is CJS; these are "type":"module").
-  const userCreationDir = path.join(__dirname, '../../../user_creation');
+  const userCreationDir = path.join(__dirname, '../../user_creation');
   account = await import(path.join(userCreationDir, 'account.js'));
   session = await import(path.join(userCreationDir, 'session.js'));
   store   = await import(path.join(userCreationDir, 'sessionStore.js'));
