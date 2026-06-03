@@ -9,6 +9,8 @@ import jwt
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
+import json
+from typing import Any, Union
 from pydantic import BaseModel
 from passlib.context import CryptContext
 from blockchain_service import record_digest_on_chain
@@ -44,7 +46,7 @@ class SendMessageRequest(BaseModel):
     recipient: str
     ciphertext: str
     nonce: str
-    header: str
+    header: Union[str, dict]
     signature: str
     digest: str
 
@@ -112,12 +114,13 @@ def send_message(req: SendMessageRequest, user_id: str = Depends(get_current_use
         raise HTTPException(status_code=404, detail="Recipient not found")
 
     # Save msg to DB first
+    header_str = json.dumps(req.header) if isinstance(req.header, dict) else req.header
     msg = crud.create_message(
         sender_id=user_id,
         recipient_id=str(recipient["user_id"]),
         content_ciphertext=req.ciphertext,
         nonce=req.nonce,
-        header=req.header,
+        header=header_str,
         signature=req.signature,
         digest=req.digest,
     )
