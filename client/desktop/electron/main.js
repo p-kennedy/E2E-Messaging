@@ -205,6 +205,7 @@ ipcMain.handle('msg:fetchSent', () => sentLog);
 // ── IPC: fetch messages ───────────────────────────────────────────────────────
 
 ipcMain.handle('msg:fetch', async () => {
+  if (!currentUser) return [];
   const { username, password, token, keys, kek } = currentUser;
 
   const raw       = addon.fetchMessages(HOST, PORT, token);
