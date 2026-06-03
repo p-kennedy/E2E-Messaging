@@ -103,7 +103,14 @@ ipcMain.handle('auth:login', async (_, { username, password }) => {
 
 ipcMain.handle('msg:send', async (_, { recipient, plaintext }) => {
   const { username, token, keys, kek } = currentUser;
-  let state = sessions[recipient];
+
+  // Sessions are keyed by recipient UUID (resolved via prekey bundle) so that
+  // the session can be found on either side regardless of how the conversation
+  // was initiated (username lookup vs UUID from incoming message).
+  // On the first send to a recipient we don't know their UUID yet, so we
+  // start with the username as a temporary key and upgrade after the bundle fetch.
+  let sessionKey = recipient;
+  let state = sessions[sessionKey];
 
   let encResult;
 
@@ -117,21 +124,41 @@ ipcMain.handle('msg:send', async (_, { recipient, plaintext }) => {
       );
     }
 
-    const { rootKey, ephPublic, opkId } = session.x3dhSend(keys, bundle);
+    // Prefer UUID as the session key so both sides can find the same session.
+    if (bundle.userId) {
+      sessionKey = bundle.userId;
+      // Migrate any old username-keyed session entry.
+      if (sessions[recipient] && recipient !== sessionKey) {
+        sessions[sessionKey] = sessions[recipient];
+        delete sessions[recipient];
+      }
+      state = sessions[sessionKey];
+    }
 
-    state = session.initRatchet(rootKey, bundle.spkPublic, {
-      ikSignPublic: bundle.ikSignPublic,
-      ikDhPublic:   bundle.ikDhPublic,
-    });
+    if (!state) {
+      const { rootKey, ephPublic, opkId } = session.x3dhSend(keys, bundle);
 
-    encResult = session.ratchetEncrypt(
-      state,
-      Buffer.from(plaintext, 'utf8'),
-      keys.ikSignPrivate,
-      { ephPublic, ikDhPublic: keys.ikDhPrivate.getPublicKey(), opkId },
-    );
-  } else {
-    // ── Subsequent message: existing ratchet state ────────────────────────
+      state = session.initRatchet(rootKey, bundle.spkPublic, {
+        ikSignPublic: bundle.ikSignPublic,
+        ikDhPublic:   bundle.ikDhPublic,
+      });
+
+      encResult = session.ratchetEncrypt(
+        state,
+        Buffer.from(plaintext, 'utf8'),
+        keys.ikSignPrivate,
+        { ephPublic, ikDhPublic: keys.ikDhPrivate.getPublicKey(), opkId },
+      );
+    }
+  }
+
+  if (!encResult) {
+    // ── Subsequent message (or receiver's first reply) ────────────────────
+    // The receiver's session starts with sendingChainKey = null until the
+    // first DH ratchet step is performed.
+    if (!state.sendingChainKey) {
+      session.dhRatchetStep(state);
+    }
     encResult = session.ratchetEncrypt(
       state,
       Buffer.from(plaintext, 'utf8'),
@@ -157,7 +184,7 @@ ipcMain.handle('msg:send', async (_, { recipient, plaintext }) => {
   sentLog.push({ message_id: serverMessageId, recipient, plaintext, created_at: new Date().toISOString() });
   store.saveSentLog(username, kek, sentLog);
 
-  sessions[recipient] = state;
+  sessions[sessionKey] = state;
   store.saveSessions(username, kek, sessions);
 });
 
@@ -219,9 +246,10 @@ ipcMain.handle('msg:fetch', async () => {
     const nonce      = Buffer.from(msg.nonce,       'base64');
     const signature  = Buffer.from(msg.signature,   'base64');
 
-    // Use sender_id as the session key for received messages.
-    const senderKey = msg.sender_id;
-    let state = sessions[senderKey];
+    // Key sessions by sender_username (same key the sender uses via prekey bundle userId).
+    // Fall back to sender_id (UUID) so old sessions loaded from disk still work.
+    const senderKey = msg.sender_username ?? msg.sender_id;
+    let state = sessions[senderKey] ?? sessions[msg.sender_id];
 
     if (!state) {
       // ── First message from this sender: reconstruct X3DH root key ────────
@@ -261,15 +289,27 @@ ipcMain.handle('msg:fetch', async () => {
 
     sessions[senderKey] = state;
     decrypted.push({
-      message_id:  msg.message_id,
-      sender_id:   msg.sender_id,
-      recipient_id: msg.recipient_id,
-      plaintext:   plaintextBuf.toString('utf8'),
-      created_at:  msg.created_at,
+      message_id:      msg.message_id,
+      sender_id:       msg.sender_id,
+      sender_username: msg.sender_username ?? null,
+      recipient_id:    msg.recipient_id,
+      plaintext:       plaintextBuf.toString('utf8'),
+      created_at:      msg.created_at,
     });
   }
 
   store.saveSessions(username, kek, sessions);
+
+  // Delete successfully decrypted messages from the server.
+  // The Double Ratchet state has already advanced past these messages, so
+  // re-fetching them on the next poll would only produce decrypt failures.
+  // Save sessions first so a delete failure can't cause message loss.
+  await Promise.all(decrypted.map(msg =>
+    fetch(
+      `${process.env.SERVER_URL}/api/messages/${encodeURIComponent(msg.message_id)}`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
+    ).catch(err => console.warn(`[msg:fetch] Failed to delete message ${msg.message_id}:`, err.message))
+  ));
 
   // Trigger OPK replenishment in the background after fetch.
   account.replenishOpksIfNeeded(username, password, token)

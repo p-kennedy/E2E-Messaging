@@ -10,8 +10,9 @@ function buildConversations(received, sent, myUserId) {
   const convos = {};
 
   for (const msg of received) {
-    const key = msg.sender_id;
-    if (!convos[key]) convos[key] = { key, displayName: shortId(key), messages: [] };
+    const key = msg.sender_username ?? msg.sender_id;
+    const displayName = msg.sender_username ?? shortId(msg.sender_id);
+    if (!convos[key]) convos[key] = { key, displayName, messages: [] };
     convos[key].messages.push({ ...msg, direction: 'received' });
   }
 

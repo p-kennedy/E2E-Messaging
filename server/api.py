@@ -155,6 +155,7 @@ def fetch_messages(user_id: str = Depends(get_current_user)):
         {
             "message_id":         str(m["message_id"]),
             "sender_id":          str(m["sender_id"]),
+            "sender_username":    m["sender_username"],
             "recipient_id":       str(m["recipient_id"]),
             "ciphertext":         m["content_ciphertext"],
             "nonce":              m["nonce"],

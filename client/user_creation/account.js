@@ -275,6 +275,7 @@ export async function fetchPrekeyBundle(recipientUsername, token) {
     }
 
     return {
+        userId:    raw.user_id ?? null,
         ikSignPublic,
         ikDhPublic,
         spkPublic,
