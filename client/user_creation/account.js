@@ -50,7 +50,33 @@ function aesGcmDecrypt(key, nonce, ciphertextWithTag) {
     return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
 }
 
+// k-anonymity check: only the first 5 hex chars of the SHA-1 hash are sent to HIBP.
+async function checkPwnedPassword(password) {
+    const hash = createHash('sha1').update(password).digest('hex').toUpperCase();
+    const prefix = hash.slice(0, 5);
+    const suffix = hash.slice(5);
+
+    let response;
+    try {
+        response = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`);
+    } catch {
+        throw new Error('Unable to reach the password breach database. Check your connection and try again.');
+    }
+    if (!response.ok) {
+        throw new Error(`Password breach check failed (${response.status}). Please try again.`);
+    }
+
+    const text = await response.text();
+    for (const line of text.split('\r\n')) {
+        const [hashSuffix] = line.split(':');
+        if (hashSuffix === suffix) {
+            throw new Error('This password has appeared in a known data breach and cannot be used. Please choose a different password.');
+        }
+    }
+}
+
 export async function createUser(username, password) {
+    await checkPwnedPassword(password);
     // Identity signing key: Curve25519 / XEdDSA (Signal's signing scheme over Curve25519)
     // sign() produces an Ed25519-compatible signature via the XEdDSA transform
     const ikSignPrivate = PrivateKey.generate();
