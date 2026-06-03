@@ -7,6 +7,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_compile_options(-Wall -Wextra -Wpedantic -Wshadow -Wno-unused-parameter)
 
+if(APPLE)
+    execute_process(
+        COMMAND brew --prefix openssl
+        OUTPUT_VARIABLE OPENSSL_ROOT_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    message(STATUS "macOS: Homebrew OpenSSL at ${OPENSSL_ROOT_DIR}")
+endif()
+
 find_package(OpenSSL 1.1.1 REQUIRED)
 message(STATUS "OpenSSL version: ${OPENSSL_VERSION}")
 
