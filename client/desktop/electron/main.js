@@ -41,7 +41,7 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   // Load central config before anything else so HOST/PORT/SERVER_URL are set.
-  const configPath = path.join(__dirname, '../../config.js');
+  const configPath = path.join(__dirname, '../../config.mjs');
   const config = await import(configPath);
   HOST = config.SERVER_HOST;
   PORT = config.SERVER_PORT;

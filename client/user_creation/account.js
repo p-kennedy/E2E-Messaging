@@ -4,7 +4,7 @@ import argon2 from 'argon2';
 import { writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
-import { SERVER_URL as DEFAULT_SERVER_URL } from '../config.js';
+import { SERVER_URL as DEFAULT_SERVER_URL } from '../config.mjs';
 
 // Re-exported for use by tests without requiring a separate install
 export { PrivateKey, PublicKey };
