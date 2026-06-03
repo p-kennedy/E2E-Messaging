@@ -24,6 +24,9 @@ target_link_libraries(client_lib
     PUBLIC OpenSSL::SSL OpenSSL::Crypto
 )
 
+# Required when client_lib is linked into the shared .node addon.
+set_target_properties(client_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 add_executable(secure_client src/main.cpp)
 target_link_libraries(secure_client PRIVATE client_lib)
 
