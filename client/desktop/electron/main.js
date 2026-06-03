@@ -224,6 +224,10 @@ ipcMain.handle('msg:fetch', async () => {
 
     if (!state) {
       // ── First message from this sender: reconstruct X3DH root key ────────
+      if (!header.ikDhPublic || !header.ephPublic) {
+        console.warn(`[msg:fetch] Dropping message ${msg.message_id} — no X3DH header and no session state`);
+        continue;
+      }
       const rootKey = session.x3dhReceive(keys, header);
       state = session.initRatchetReceiver(rootKey, header, keys.spkPrivate);
 
