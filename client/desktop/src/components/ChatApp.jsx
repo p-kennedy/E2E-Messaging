@@ -57,6 +57,12 @@ export default function ChatApp({ username, onLogout }) {
 
   useEffect(() => {
     async function init() {
+      try {
+        const history = await window.messagingAPI.fetchReceivedMessages();
+        if (history.length > 0) setReceived(history);
+      } catch (err) {
+        console.error('Failed to load received history:', err);
+      }
       await loadMessages();
       try {
         const history = await window.messagingAPI.fetchSentMessages();

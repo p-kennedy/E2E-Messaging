@@ -11,9 +11,10 @@ let HOST;     // loaded from client/config.js
 let PORT;     // loaded from client/config.js
 
 // Per-session runtime state — rebuilt from disk after every login.
-let currentUser = null;   // { username, password, token, keys, kek }
-let sessions    = {};     // { [partnerUsername]: ratchetState }
-let sentLog     = [];     // { message_id, recipient, plaintext, created_at }[]
+let currentUser  = null;  // { username, password, token, keys, kek }
+let sessions     = {};    // { [partnerUsername]: ratchetState }
+let sentLog      = [];    // { message_id, recipient, plaintext, created_at }[]
+let receivedLog  = [];    // { message_id, sender_id, sender_username, plaintext, created_at }[]
 
 // ── Window ────────────────────────────────────────────────────────────────────
 
@@ -93,8 +94,9 @@ ipcMain.handle('auth:login', async (_, { username, password }) => {
   const kek = await account.deriveKek(Buffer.from(password, 'utf8'), localSalt);
 
   currentUser = { username, password, token, keys, kek };
-  sessions    = store.loadSessions(username, kek);
-  sentLog     = store.loadSentLog(username, kek);
+  sessions     = store.loadSessions(username, kek);
+  sentLog      = store.loadSentLog(username, kek);
+  receivedLog  = store.loadReceivedLog(username, kek);
 
   return { token };
 });
@@ -225,9 +227,10 @@ ipcMain.handle('msg:download', async (_, { senderName, plaintext, createdAt }) =
   writeFileSync(filePath, `From: ${senderName}\nDate: ${date}\n\n${plaintext}\n`, 'utf8');
 });
 
-// ── IPC: fetch sent messages (loaded from local encrypted log) ────────────────
+// ── IPC: fetch sent/received messages (loaded from local encrypted logs) ──────
 
-ipcMain.handle('msg:fetchSent', () => sentLog);
+ipcMain.handle('msg:fetchSent',     () => sentLog);
+ipcMain.handle('msg:fetchReceived', () => receivedLog);
 
 // ── IPC: fetch messages ───────────────────────────────────────────────────────
 
@@ -299,6 +302,11 @@ ipcMain.handle('msg:fetch', async () => {
   }
 
   store.saveSessions(username, kek, sessions);
+
+  if (decrypted.length > 0) {
+    receivedLog.push(...decrypted);
+    store.saveReceivedLog(username, kek, receivedLog);
+  }
 
   // Delete successfully decrypted messages from the server.
   // The Double Ratchet state has already advanced past these messages, so
