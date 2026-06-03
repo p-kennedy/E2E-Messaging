@@ -78,6 +78,11 @@ export default function ChatWindow({ recipient, displayName, messages, username,
                       Delete
                     </button>
                   )}
+                  {mine && onRevoke && (
+                    <button className="bubble-action-btn" onClick={() => onRevoke(msg.message_id)}>
+                      Revoke
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

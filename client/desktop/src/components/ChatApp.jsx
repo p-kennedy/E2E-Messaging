@@ -62,6 +62,11 @@ export default function ChatApp({ username, onLogout }) {
     setReceived(prev => prev.filter(m => m.message_id !== messageId));
   }
 
+  async function handleRevoke(messageId) {
+    await window.messagingAPI.revokeMessage({ messageId });
+    setSent(prev => prev.filter(m => m.message_id !== messageId));
+  }
+
   function handleSentMessage(msg) {
     setSent(prev => [...prev, msg]);
     setSelected(msg.recipient);
@@ -85,6 +90,7 @@ export default function ChatApp({ username, onLogout }) {
         onSentMessage={handleSentMessage}
         onRefresh={loadMessages}
         onDelete={handleDelete}
+        onRevoke={handleRevoke}
       />
     </div>
   );

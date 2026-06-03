@@ -132,8 +132,8 @@ def send_message(req: SendMessageRequest, user_id: str = Depends(get_current_use
 
     print(f"[Blockchain] Submitting anchor job for message {msg['message_id']}")
     _executor.submit(anchor)
-            
-    return {"status": "queued"}
+
+    return {"status": "queued", "message_id": str(msg["message_id"])}
 
 @app.delete("/api/messages/{message_id}", status_code=204)
 def delete_message_endpoint(message_id: str, user_id: str = Depends(get_current_user)):

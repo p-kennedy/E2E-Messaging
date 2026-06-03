@@ -21,13 +21,13 @@ public:
     // Authenticate with the server. Stores the returned auth token for subsequent calls.
     void login(const std::string& username, const std::string& password);
 
-    // Send an encrypted message. All fields come from the crypto module (session.js).
-    void sendMessage(const std::string& recipient,
-                     const std::string& ciphertext,
-                     const std::string& nonce,
-                     const std::string& header,
-                     const std::string& signature,
-                     const std::string& digest);
+    // Send an encrypted message. Returns the raw JSON response body (contains message_id).
+    std::string sendMessage(const std::string& recipient,
+                            const std::string& ciphertext,
+                            const std::string& nonce,
+                            const std::string& header,
+                            const std::string& signature,
+                            const std::string& digest);
 
     // Fetch all messages for the logged-in user. Returns the raw JSON response body.
     std::string fetchMessages();
