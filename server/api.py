@@ -11,9 +11,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from passlib.context import CryptContext
-from blockchain_service import record_digest_on_chain
+from blockchain_service import record_digest_on_chain, get_record_by_tx, get_record_by_digest
 from concurrent.futures import ThreadPoolExecutor
-from blockchain_service import get_record_by_tx
 
 _executor = ThreadPoolExecutor(max_workers=2)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "database"))
@@ -163,7 +162,34 @@ def verify(tx_hash: str):
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
+
+@app.get("/api/verify/by-content")
+def verify_by_content(digest: str):
+    # Fast path: digest is in the local DB with a recorded tx hash.
+    tx_hash = crud.get_tx_hash_by_digest(digest)
+    if tx_hash is not None:
+        try:
+            result = get_record_by_tx(tx_hash)
+            result["tx_hash"] = tx_hash
+            return result
+        except Exception:
+            pass  # tx_hash stored but stale — fall through to chain scan
+
+    # Fallback: scan all DigestRecorded events on-chain.
+    # Covers messages anchored by a different server instance (e.g. remote deployment).
+    try:
+        result = get_record_by_digest(digest)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No blockchain record found for this content. The message may not exist in our records, or blockchain anchoring may still be pending — try again in a few seconds.",
+        )
+
+    return result
+
 @app.get("/verify")
 def verification_page():
     return FileResponse(os.path.join(os.path.dirname(__file__), "verify.html"))

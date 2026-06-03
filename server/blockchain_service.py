@@ -1,5 +1,7 @@
 import os
+from typing import cast
 from web3 import Web3
+from web3.types import TxParams
 from hexbytes import HexBytes
 
 CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS")
@@ -18,7 +20,7 @@ ABI = [
         "anonymous": False,
         "inputs": [
             {"indexed": True, "internalType": "uint256", "name": "id", "type": "uint256"},
-            {"indexed": False, "internalType": "bytes32", "name": "hash", "type": "bytes32"},
+            {"indexed": True, "internalType": "bytes32", "name": "hash", "type": "bytes32"},
             {"indexed": False, "internalType": "uint256", "name": "timestamp", "type": "uint256"},
         ],
         "name": "DigestRecorded",
@@ -57,23 +59,53 @@ def record_digest_on_chain(digest_hex: str) -> str:
     digest_bytes = bytes.fromhex(digest_hex.removeprefix("0x"))
     
     print("[Blockchain] Building transaction...")
-    tx = contract.functions.recordDigest(digest_bytes).build_transaction({
-        "from": account.address,
-        "nonce": w3.eth.get_transaction_count(account.address),
-        "gas": 200000,
-        "gasPrice": w3.eth.gas_price,
-    })
+    latest       = w3.eth.get_block("latest")
+    base_fee     = latest.get("baseFeePerGas") or w3.eth.gas_price
+    priority_fee = w3.to_wei(2, "gwei")
+    max_fee      = base_fee * 2 + priority_fee
+
+    tx = contract.functions.recordDigest(digest_bytes).build_transaction(cast(TxParams, {
+        "from":                 account.address,
+        "nonce":                w3.eth.get_transaction_count(account.address),
+        "gas":                  200000,
+        "maxPriorityFeePerGas": priority_fee,
+        "maxFeePerGas":         max_fee,
+    }))
 
     print("[Blockchain] Signing transaction...")
     signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
-    
+
     print("[Blockchain] Sending transaction...")
     tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-    
+
     print(f"[Blockchain] Waiting for receipt... tx: {tx_hash.hex()}")
-    receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-    
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
+
     return receipt["transactionHash"].hex()
+
+
+def get_record_by_digest(digest_hex: str) -> dict | None:
+    """Scan all DigestRecorded events on-chain to find one matching digest_hex.
+    Used as a fallback when the local DB has no record (e.g. message was sent
+    through a different server instance)."""
+    _, contract = get_contract()
+
+    digest_bytes = bytes.fromhex(digest_hex.removeprefix("0x"))
+
+    logs = contract.events.DigestRecorded().get_logs(
+        from_block=0, argument_filters={"hash": digest_bytes}
+    )
+    for event in logs:
+        if event["args"]["hash"] == digest_bytes:
+            tx = event["transactionHash"]
+            return {
+                "on_chain_hash": "0x" + event["args"]["hash"].hex(),
+                "timestamp":     event["args"]["timestamp"],
+                "block":         event["blockNumber"],
+                "tx_hash":       tx.hex() if not tx.hex().startswith("0x") else tx.hex(),
+            }
+
+    return None
 
 
 def get_record_by_tx(tx_hash: str) -> dict:

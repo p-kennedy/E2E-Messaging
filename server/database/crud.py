@@ -202,6 +202,19 @@ def get_conversation(user_a: str, user_b: str) -> list[dict]:
         return [dict(r) for r in cur.fetchall()]
 
 
+def get_tx_hash_by_digest(digest: str) -> str | None:
+    # Accept both "0x<hash>" and "<hash>" — normalize to try both variants
+    without_prefix = digest.removeprefix("0x")
+    with_prefix    = "0x" + without_prefix
+    with DBConnection() as (_, cur):
+        cur.execute(
+            "SELECT blockchain_tx_hash FROM messages WHERE digest IN (%s, %s) LIMIT 1",
+            (with_prefix, without_prefix),
+        )
+        row = cur.fetchone()
+        return row["blockchain_tx_hash"] if row else None
+
+
 def update_blockchain_tx_hash(message_id: str, tx_hash: str) -> bool:
     with DBConnection() as (conn, cur):
         cur.execute(

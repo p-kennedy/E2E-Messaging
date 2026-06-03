@@ -12,7 +12,7 @@ contract MessageDigest {
     uint256 public recordCount;
     address public owner;
 
-    event DigestRecorded(uint256 indexed id, bytes32 hash, uint256 timestamp);
+    event DigestRecorded(uint256 indexed id, bytes32 indexed hash, uint256 timestamp);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Not authorised");

@@ -1,4 +1,5 @@
 import os
+from typing import Any
 import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
@@ -35,7 +36,7 @@ def release_conn(conn: psycopg2.extensions.connection) -> None:
 class DBConnection:
     """Context manager that borrows a connection from the pool."""
 
-    def __enter__(self) -> tuple[psycopg2.extensions.connection, psycopg2.extensions.cursor]:
+    def __enter__(self) -> tuple[psycopg2.extensions.connection, Any]:
         self.conn = get_conn()
         self.cur = self.conn.cursor(cursor_factory=RealDictCursor)
         return self.conn, self.cur

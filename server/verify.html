@@ -19,6 +19,7 @@
     button { background: #2563eb; color: white; border: none; padding: 12px 32px;
              border-radius: 6px; font-size: 1rem; cursor: pointer; font-weight: 600; }
     button:hover { background: #1d4ed8; }
+    button:disabled { background: #93c5fd; cursor: not-allowed; }
     #error { margin-top: 16px; color: #dc2626; font-size: 0.93rem; display: none; }
     #result { margin-top: 32px; padding: 24px; border-radius: 10px; display: none; }
     #result.pass { background: #dcfce7; border: 1.5px solid #16a34a; }
@@ -28,7 +29,7 @@
     #result.fail #result-title { color: #b91c1c; }
     .detail-row { margin-bottom: 14px; }
     .detail-row .label { font-weight: 600; font-size: 0.85rem; color: #555; margin-bottom: 3px; }
-    .detail-row .value { font-size: 0.88rem; word-break: break-all; color: #111; 
+    .detail-row .value { font-size: 0.88rem; word-break: break-all; color: #111;
                          background: rgba(0,0,0,0.05); padding: 6px 10px; border-radius: 4px; }
     .match-yes { color: #15803d; font-weight: 700; }
     .match-no  { color: #b91c1c; font-weight: 700; }
@@ -39,9 +40,9 @@
 
   <h1>Message Integrity Verification</h1>
   <p class="subtitle">
-    Paste the original message content and the blockchain transaction hash. 
-    The page will compute the keccak256 hash of the content and compare it 
-    against the hash recorded on the Sepolia blockchain.
+    Paste the original message content below. The page will compute its keccak256 hash,
+    look up the matching blockchain record automatically, and confirm whether the content
+    matches what was anchored on the Sepolia blockchain.
   </p>
 
   <label for="content">
@@ -50,13 +51,7 @@
   </label>
   <textarea id="content" placeholder="Paste the original message content here..."></textarea>
 
-  <label for="txhash">
-    Blockchain Transaction Hash
-    <span class="hint">— the tx hash from the message record</span>
-  </label>
-  <input type="text" id="txhash" placeholder="e.g. 0xe4246aaee38e355b... or without 0x prefix" />
-
-  <button onclick="verify()">Verify Message</button>
+  <button id="verify-btn" onclick="verify()">Verify Message</button>
 
   <div id="error"></div>
 
@@ -99,19 +94,22 @@
 
   <script>
     async function verify() {
-      const content  = document.getElementById('content').value;
-      const txhash   = document.getElementById('txhash').value.trim();
-      const errorEl  = document.getElementById('error');
-      const resultEl = document.getElementById('result');
+      const content   = document.getElementById('content').value;
+      const errorEl   = document.getElementById('error');
+      const resultEl  = document.getElementById('result');
+      const btn       = document.getElementById('verify-btn');
 
       errorEl.style.display  = 'none';
       resultEl.style.display = 'none';
 
-      if (!content || !txhash) {
-        errorEl.textContent    = 'Please fill in both fields.';
-        errorEl.style.display  = 'block';
+      if (!content) {
+        errorEl.textContent   = 'Please paste the message content.';
+        errorEl.style.display = 'block';
         return;
       }
+
+      btn.disabled    = true;
+      btn.textContent = 'Verifying…';
 
       try {
         // Step 1 — compute keccak256 of the raw message content
@@ -119,8 +117,8 @@
         const contentBytes = encoder.encode(content);
         const computedHex  = ethers.keccak256(contentBytes);
 
-        // Step 2 — fetch the on-chain record for this transaction
-        const res = await fetch(`/api/verify?tx_hash=${encodeURIComponent(txhash)}`)
+        // Step 2 — look up the blockchain record by digest
+        const res = await fetch(`/api/verify/by-content?digest=${encodeURIComponent(computedHex)}`);
         if (!res.ok) {
           const err = await res.json();
           throw new Error(err.detail || 'Server error');
@@ -147,13 +145,16 @@
           : '<span class="match-no">No — hashes differ; content may have been tampered with</span>';
         document.getElementById('show-timestamp').textContent = timestamp;
         document.getElementById('show-block').textContent     = data.block;
-        document.getElementById('show-txhash').textContent    = txhash;
+        document.getElementById('show-txhash').textContent    = data.tx_hash;
 
         resultEl.style.display = 'block';
 
       } catch (err) {
         errorEl.textContent   = `Error: ${err.message}`;
         errorEl.style.display = 'block';
+      } finally {
+        btn.disabled    = false;
+        btn.textContent = 'Verify Message';
       }
     }
   </script>
