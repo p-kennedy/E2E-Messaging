@@ -6,13 +6,17 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 import jwt
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 import json
 from typing import Any, Union
 from pydantic import BaseModel
 from passlib.context import CryptContext
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from blockchain_service import record_digest_on_chain
 from concurrent.futures import ThreadPoolExecutor
 from blockchain_service import get_record_by_tx
@@ -22,13 +26,30 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "database"))
 from connection import init_pool
 import crud
 
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET is not set — copy .env.example to .env and fill in a value")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRY_HOURS = 24
+
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 security = HTTPBearer()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-JWT_SECRET = os.getenv("JWT_SECRET", "change-me-in-production")
-JWT_ALGORITHM = "HS256"
-JWT_EXPIRY_HOURS = 24
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -59,7 +80,7 @@ class UploadOpksRequest(BaseModel):
 def make_token(user_id: str) -> str:
     payload = {
         "sub": user_id,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=JWT_EXPIRY_HOURS),
+        "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=JWT_EXPIRY_HOURS),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -76,7 +97,8 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.post("/api/auth/register", status_code=201)
-def register(req: RegisterRequest):
+@limiter.limit("3/minute")
+def register(request: Request, req: RegisterRequest):
     if crud.get_user_by_username(req.username):
         raise HTTPException(status_code=409, detail="Username already taken")
     password_hash = pwd_context.hash(req.password)
@@ -84,7 +106,8 @@ def register(req: RegisterRequest):
     return {"user_id": str(user["user_id"]), "username": user["username"]}
 
 @app.post("/api/auth/login")
-def login(req: LoginRequest):
+@limiter.limit("5/minute")
+def login(request: Request, req: LoginRequest):
     user = crud.get_user_by_username(req.username)
     if not user or not pwd_context.verify(req.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
