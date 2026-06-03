@@ -1,14 +1,19 @@
 import os
 import sys
 import datetime
+
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
+
 import jwt
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from passlib.context import CryptContext
 from blockchain_service import record_digest_on_chain
-import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from blockchain_service import get_record_by_tx
 
 _executor = ThreadPoolExecutor(max_workers=2)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "database"))
@@ -125,7 +130,8 @@ def send_message(req: SendMessageRequest, user_id: str = Depends(get_current_use
         except Exception as e:
             print(f"[Blockchain] Failed to anchor message {msg['message_id']}: {e}")
 
-            _executor.submit(anchor)
+    print(f"[Blockchain] Submitting anchor job for message {msg['message_id']}")
+    _executor.submit(anchor)
             
     return {"status": "queued"}
 
@@ -147,6 +153,20 @@ def fetch_messages(user_id: str = Depends(get_current_user)):
         }
         for m in messages
     ]}
+
+#── Verification on Blockchain ────────────────────────────────────────────────────────────────
+
+@app.get("/api/verify")
+def verify(tx_hash: str):
+    try:
+        result = get_record_by_tx(tx_hash)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+@app.get("/verify")
+def verification_page():
+    return FileResponse(os.path.join(os.path.dirname(__file__), "verify.html"))
 
 
 # ── Startup ───────────────────────────────────────────────────────────────────
