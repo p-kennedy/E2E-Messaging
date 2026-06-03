@@ -154,7 +154,6 @@ ipcMain.handle('msg:send', async (_, { recipient, plaintext }) => {
   let serverMessageId = require('node:crypto').randomUUID();
   try { serverMessageId = JSON.parse(responseStr).message_id ?? serverMessageId; } catch {}
 
-  const { username, kek } = currentUser;
   sentLog.push({ message_id: serverMessageId, recipient, plaintext, created_at: new Date().toISOString() });
   store.saveSentLog(username, kek, sentLog);
 
