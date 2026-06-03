@@ -11,5 +11,6 @@ contextBridge.exposeInMainWorld('messagingAPI', {
   fetchMessages: ()     => ipcRenderer.invoke('msg:fetch'),
   deleteMessage: (args) => ipcRenderer.invoke('msg:delete',    args),
   revokeMessage:   (args) => ipcRenderer.invoke('msg:revoke',    args),
-  downloadMessage: (args) => ipcRenderer.invoke('msg:download',  args),
+  downloadMessage:    (args) => ipcRenderer.invoke('msg:download',  args),
+  fetchSentMessages: ()     => ipcRenderer.invoke('msg:fetchSent'),
 });

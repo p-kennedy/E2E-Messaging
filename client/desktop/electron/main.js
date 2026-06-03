@@ -199,6 +199,10 @@ ipcMain.handle('msg:download', async (_, { senderName, plaintext, createdAt }) =
   writeFileSync(filePath, `From: ${senderName}\nDate: ${date}\n\n${plaintext}\n`, 'utf8');
 });
 
+// ── IPC: fetch sent messages (loaded from local encrypted log) ────────────────
+
+ipcMain.handle('msg:fetchSent', () => sentLog);
+
 // ── IPC: fetch messages ───────────────────────────────────────────────────────
 
 ipcMain.handle('msg:fetch', async () => {

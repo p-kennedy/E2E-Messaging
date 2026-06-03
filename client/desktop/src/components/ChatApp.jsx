@@ -49,7 +49,16 @@ export default function ChatApp({ username, onLogout }) {
   }, []);
 
   useEffect(() => {
-    loadMessages();
+    async function init() {
+      await loadMessages();
+      try {
+        const history = await window.messagingAPI.fetchSentMessages();
+        setSent(history);
+      } catch (err) {
+        console.error('Failed to load sent history:', err);
+      }
+    }
+    init();
     const id = setInterval(loadMessages, 5000);
     return () => clearInterval(id);
   }, [loadMessages]);
