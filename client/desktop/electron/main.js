@@ -1,6 +1,6 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
-const { readFileSync } = require('fs');
+const { readFileSync, writeFileSync } = require('fs');
 
 // Resolved lazily after app.whenReady so app.getPath('userData') is available.
 let addon;    // C++ native addon
@@ -184,6 +184,19 @@ ipcMain.handle('msg:revoke', async (_, { messageId }) => {
   if (!res.ok) throw new Error(`Revoke failed (${res.status}): ${await res.text()}`);
   sentLog = sentLog.filter(m => m.message_id !== messageId);
   store.saveSentLog(username, kek, sentLog);
+});
+
+// ── IPC: download message ─────────────────────────────────────────────────────
+
+ipcMain.handle('msg:download', async (_, { senderName, plaintext, createdAt }) => {
+  const { filePath } = await dialog.showSaveDialog({
+    title: 'Save message',
+    defaultPath: `message-${Date.now()}.txt`,
+    filters: [{ name: 'Text file', extensions: ['txt'] }],
+  });
+  if (!filePath) return;
+  const date = new Date(createdAt).toLocaleString();
+  writeFileSync(filePath, `From: ${senderName}\nDate: ${date}\n\n${plaintext}\n`, 'utf8');
 });
 
 // ── IPC: fetch messages ───────────────────────────────────────────────────────

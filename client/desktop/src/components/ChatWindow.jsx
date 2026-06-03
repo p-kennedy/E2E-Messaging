@@ -101,6 +101,16 @@ export default function ChatWindow({ recipient, displayName, messages, username,
                   {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </time>
                 <div className="bubble-actions">
+                  <button
+                    className="bubble-action-btn"
+                    onClick={() => window.messagingAPI.downloadMessage({
+                      senderName: mine ? username : (displayName ?? msg.sender_id),
+                      plaintext: msg.plaintext,
+                      createdAt: msg.created_at,
+                    })}
+                  >
+                    Save
+                  </button>
                   <button className="bubble-action-btn" onClick={() => { setForwardMsg(msg); setForwardTo(''); setForwardError(''); }}>
                     Forward
                   </button>
