@@ -327,11 +327,40 @@ body {
 
 .bubble-text { font-size: 0.9rem; word-break: break-word; user-select: text; }
 
+.bubble-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .bubble-time {
   font-size: 0.68rem;
   opacity: 0.6;
-  align-self: flex-end;
 }
+
+.bubble-actions {
+  display: flex;
+  gap: 3px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.bubble:hover .bubble-actions { opacity: 1; }
+
+.bubble-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.68rem;
+  padding: 2px 5px;
+  border-radius: 4px;
+  line-height: 1.4;
+  transition: background 0.1s;
+}
+.bubble.mine .bubble-action-btn { color: rgba(255, 255, 255, 0.75); }
+.bubble.mine .bubble-action-btn:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
+.bubble.theirs .bubble-action-btn { color: #aaa; }
+.bubble.theirs .bubble-action-btn:hover { background: rgba(0, 0, 0, 0.06); color: #333; }
 
 .send-error {
   padding: 6px 20px;

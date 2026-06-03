@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 
-export default function ChatWindow({ recipient, displayName, messages, username, onSentMessage, onRefresh }) {
+export default function ChatWindow({ recipient, displayName, messages, username, onSentMessage, onRefresh, onDelete, onRevoke }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -68,9 +68,18 @@ export default function ChatWindow({ recipient, displayName, messages, username,
           return (
             <div key={msg.message_id} className={`bubble ${mine ? 'mine' : 'theirs'}`}>
               <span className="bubble-text">{msg.plaintext}</span>
-              <time className="bubble-time">
-                {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </time>
+              <div className="bubble-meta">
+                <time className="bubble-time">
+                  {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </time>
+                <div className="bubble-actions">
+                  {!mine && onDelete && (
+                    <button className="bubble-action-btn" onClick={() => onDelete(msg.message_id)}>
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           );
         })}

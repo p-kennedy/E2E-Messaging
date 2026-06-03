@@ -135,6 +135,16 @@ def send_message(req: SendMessageRequest, user_id: str = Depends(get_current_use
             
     return {"status": "queued"}
 
+@app.delete("/api/messages/{message_id}", status_code=204)
+def delete_message_endpoint(message_id: str, user_id: str = Depends(get_current_user)):
+    msg = crud.get_message_by_id(message_id)
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if str(msg["sender_id"]) != user_id and str(msg["recipient_id"]) != user_id:
+        raise HTTPException(status_code=403, detail="Not authorised")
+    crud.delete_message(message_id)
+
+
 @app.get("/api/messages")
 def fetch_messages(user_id: str = Depends(get_current_user)):
     messages = crud.get_messages_for_recipient(user_id)

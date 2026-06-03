@@ -9,4 +9,5 @@ contextBridge.exposeInMainWorld('messagingAPI', {
   login:         (args) => ipcRenderer.invoke('auth:login',    args),
   sendMessage:   (args) => ipcRenderer.invoke('msg:send',      args),
   fetchMessages: ()     => ipcRenderer.invoke('msg:fetch'),
+  deleteMessage: (args) => ipcRenderer.invoke('msg:delete',    args),
 });

@@ -152,6 +152,17 @@ ipcMain.handle('msg:send', async (_, { recipient, plaintext }) => {
   store.saveSessions(username, kek, sessions);
 });
 
+// ── IPC: delete message ───────────────────────────────────────────────────────
+
+ipcMain.handle('msg:delete', async (_, { messageId }) => {
+  const { token } = currentUser;
+  const res = await fetch(
+    `${process.env.SERVER_URL}/api/messages/${encodeURIComponent(messageId)}`,
+    { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) throw new Error(`Delete failed (${res.status}): ${await res.text()}`);
+});
+
 // ── IPC: fetch messages ───────────────────────────────────────────────────────
 
 ipcMain.handle('msg:fetch', async () => {

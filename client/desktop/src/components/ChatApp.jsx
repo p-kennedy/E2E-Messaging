@@ -57,6 +57,11 @@ export default function ChatApp({ username, onLogout }) {
   const conversations = buildConversations(received, sent, myUserId);
   const selectedMessages = selected ? (conversations[selected]?.messages ?? []) : [];
 
+  async function handleDelete(messageId) {
+    await window.messagingAPI.deleteMessage({ messageId });
+    setReceived(prev => prev.filter(m => m.message_id !== messageId));
+  }
+
   function handleSentMessage(msg) {
     setSent(prev => [...prev, msg]);
     setSelected(msg.recipient);
@@ -79,6 +84,7 @@ export default function ChatApp({ username, onLogout }) {
         username={username}
         onSentMessage={handleSentMessage}
         onRefresh={loadMessages}
+        onDelete={handleDelete}
       />
     </div>
   );
