@@ -56,7 +56,7 @@ app.whenReady().then(async () => {
   addon = require(addonPath);
 
   // Dynamically import ESM modules (main.js is CJS; these are "type":"module").
-  const userCreationDir = path.join(__dirname, '../../../user_creation');
+  const userCreationDir = path.join(__dirname, '../../user_creation');
   account = await import(path.join(userCreationDir, 'account.js'));
   session = await import(path.join(userCreationDir, 'session.js'));
   store   = await import(path.join(userCreationDir, 'sessionStore.js'));
