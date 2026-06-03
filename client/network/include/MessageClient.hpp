@@ -1,9 +1,10 @@
 #pragma once
 
+#include "MessageStore.hpp"
 #include "SecureClientConnection.hpp"
+#include <memory>
 #include <string>
 #include <vector>
-#include <memory>
 
 // High-level client that uses SecureClientConnection to talk to the messaging API.
 class MessageClient {
@@ -30,7 +31,15 @@ public:
                             const std::string& digest);
 
     // Fetch all messages for the logged-in user. Returns the raw JSON response body.
+    // The N-API addon uses this; C++ callers should prefer fetchAndStore().
     std::string fetchMessages();
+
+    // Fetch messages from the server, parse them into Message objects, populate the
+    // internal MessageStore, and return the messages sorted by createdAt.
+    std::vector<Message> fetchAndStore();
+
+    // Read-only access to the local message store populated by fetchAndStore().
+    const MessageStore& store() const;
 
     bool isAuthenticated() const;
 
@@ -39,9 +48,10 @@ public:
     const std::string& getAuthToken() const;
 
 private:
-    std::string m_host;
-    int         m_port;
-    std::string m_authToken;
+    std::string   m_host;
+    int           m_port;
+    std::string   m_authToken;
+    MessageStore  m_store;
 
     std::string buildRequest(const std::string& method, const std::string& path,
                              const std::string& body = "") const;
@@ -50,4 +60,8 @@ private:
     std::string extractBody(const std::string& httpResponse) const;
     std::string extractJsonString(const std::string& json,
                                   const std::string& key) const;
+
+    // Extract all top-level JSON object strings from within an outer JSON array.
+    // Uses brace-counting so nested objects (e.g. the header field) are handled.
+    std::vector<std::string> extractJsonObjects(const std::string& json) const;
 };

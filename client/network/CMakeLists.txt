@@ -13,6 +13,7 @@ message(STATUS "OpenSSL version: ${OPENSSL_VERSION}")
 add_library(client_lib
     src/SecureClientConnection.cpp
     src/MessageClient.cpp
+    src/MessageStore.cpp
 )
 
 target_include_directories(client_lib

@@ -71,6 +71,58 @@ std::string MessageClient::fetchMessages() {
     return doRequest("GET", "/api/messages");
 }
 
+std::vector<Message> MessageClient::fetchAndStore() {
+    const std::string raw = fetchMessages();
+    m_store.clear();
+
+    for (const auto& obj : extractJsonObjects(raw)) {
+        Message msg(
+            extractJsonString(obj, "message_id"),
+            extractJsonString(obj, "sender_id"),
+            extractJsonString(obj, "recipient_id"),
+            extractJsonString(obj, "ciphertext"),
+            extractJsonString(obj, "created_at")
+        );
+        if (!msg.id.empty()) m_store.add(msg);
+    }
+
+    std::cout << "[Store] Loaded " << m_store.count() << " message(s).\n";
+    return m_store.getAll();
+}
+
+const MessageStore& MessageClient::store() const {
+    return m_store;
+}
+
+std::vector<std::string> MessageClient::extractJsonObjects(const std::string& json) const {
+    std::vector<std::string> objects;
+    int         depth = 0;
+    bool        inStr = false;
+    std::size_t start = 0;
+
+    for (std::size_t i = 0; i < json.size(); ++i) {
+        const char c = json[i];
+
+        if (inStr) {
+            // End of string, ignoring escaped quotes
+            if (c == '"' && (i == 0 || json[i - 1] != '\\')) inStr = false;
+            continue;
+        }
+
+        if (c == '"') { inStr = true; continue; }
+
+        if (c == '{') {
+            if (depth == 1) start = i;   // entering a message object (inside outer { })
+            ++depth;
+        } else if (c == '}') {
+            --depth;
+            if (depth == 1)              // just closed a message object
+                objects.push_back(json.substr(start, i - start + 1));
+        }
+    }
+    return objects;
+}
+
 bool MessageClient::isAuthenticated() const {
     return !m_authToken.empty();
 }
