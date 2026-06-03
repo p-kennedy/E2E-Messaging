@@ -1,6 +1,6 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
-const { readFileSync } = require('fs');
+const { readFileSync, writeFileSync } = require('fs');
 
 // Resolved lazily after app.whenReady so app.getPath('userData') is available.
 let addon;    // C++ native addon
@@ -13,6 +13,7 @@ let PORT;     // loaded from client/config.js
 // Per-session runtime state — rebuilt from disk after every login.
 let currentUser = null;   // { username, password, token, keys, kek }
 let sessions    = {};     // { [partnerUsername]: ratchetState }
+let sentLog     = [];     // { message_id, recipient, plaintext, created_at }[]
 
 // ── Window ────────────────────────────────────────────────────────────────────
 
@@ -93,6 +94,7 @@ ipcMain.handle('auth:login', async (_, { username, password }) => {
 
   currentUser = { username, password, token, keys, kek };
   sessions    = store.loadSessions(username, kek);
+  sentLog     = store.loadSentLog(username, kek);
 
   return { token };
 });
@@ -139,7 +141,7 @@ ipcMain.handle('msg:send', async (_, { recipient, plaintext }) => {
 
   const { header, ciphertext, nonce, signature, digest } = encResult;
 
-  addon.sendMessage(
+  const responseStr = addon.sendMessage(
     HOST, PORT, token, recipient,
     ciphertext.toString('base64'),
     nonce.toString('base64'),
@@ -148,9 +150,58 @@ ipcMain.handle('msg:send', async (_, { recipient, plaintext }) => {
     digest,
   );
 
+  // Parse the server-assigned message_id so the sender can revoke later.
+  let serverMessageId = require('node:crypto').randomUUID();
+  try { serverMessageId = JSON.parse(responseStr).message_id ?? serverMessageId; } catch {}
+
+  const { username, kek } = currentUser;
+  sentLog.push({ message_id: serverMessageId, recipient, plaintext, created_at: new Date().toISOString() });
+  store.saveSentLog(username, kek, sentLog);
+
   sessions[recipient] = state;
   store.saveSessions(username, kek, sessions);
 });
+
+// ── IPC: delete message ───────────────────────────────────────────────────────
+
+ipcMain.handle('msg:delete', async (_, { messageId }) => {
+  const { token } = currentUser;
+  const res = await fetch(
+    `${process.env.SERVER_URL}/api/messages/${encodeURIComponent(messageId)}`,
+    { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) throw new Error(`Delete failed (${res.status}): ${await res.text()}`);
+});
+
+// ── IPC: revoke message (sender retracts before recipient reads) ───────────────
+
+ipcMain.handle('msg:revoke', async (_, { messageId }) => {
+  const { token, username, kek } = currentUser;
+  const res = await fetch(
+    `${process.env.SERVER_URL}/api/messages/${encodeURIComponent(messageId)}`,
+    { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) throw new Error(`Revoke failed (${res.status}): ${await res.text()}`);
+  sentLog = sentLog.filter(m => m.message_id !== messageId);
+  store.saveSentLog(username, kek, sentLog);
+});
+
+// ── IPC: download message ─────────────────────────────────────────────────────
+
+ipcMain.handle('msg:download', async (_, { senderName, plaintext, createdAt }) => {
+  const { filePath } = await dialog.showSaveDialog({
+    title: 'Save message',
+    defaultPath: `message-${Date.now()}.txt`,
+    filters: [{ name: 'Text file', extensions: ['txt'] }],
+  });
+  if (!filePath) return;
+  const date = new Date(createdAt).toLocaleString();
+  writeFileSync(filePath, `From: ${senderName}\nDate: ${date}\n\n${plaintext}\n`, 'utf8');
+});
+
+// ── IPC: fetch sent messages (loaded from local encrypted log) ────────────────
+
+ipcMain.handle('msg:fetchSent', () => sentLog);
 
 // ── IPC: fetch messages ───────────────────────────────────────────────────────
 

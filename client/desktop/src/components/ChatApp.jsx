@@ -49,13 +49,32 @@ export default function ChatApp({ username, onLogout }) {
   }, []);
 
   useEffect(() => {
-    loadMessages();
+    async function init() {
+      await loadMessages();
+      try {
+        const history = await window.messagingAPI.fetchSentMessages();
+        setSent(history);
+      } catch (err) {
+        console.error('Failed to load sent history:', err);
+      }
+    }
+    init();
     const id = setInterval(loadMessages, 5000);
     return () => clearInterval(id);
   }, [loadMessages]);
 
   const conversations = buildConversations(received, sent, myUserId);
   const selectedMessages = selected ? (conversations[selected]?.messages ?? []) : [];
+
+  async function handleDelete(messageId) {
+    await window.messagingAPI.deleteMessage({ messageId });
+    setReceived(prev => prev.filter(m => m.message_id !== messageId));
+  }
+
+  async function handleRevoke(messageId) {
+    await window.messagingAPI.revokeMessage({ messageId });
+    setSent(prev => prev.filter(m => m.message_id !== messageId));
+  }
 
   function handleSentMessage(msg) {
     setSent(prev => [...prev, msg]);
@@ -79,6 +98,8 @@ export default function ChatApp({ username, onLogout }) {
         username={username}
         onSentMessage={handleSentMessage}
         onRefresh={loadMessages}
+        onDelete={handleDelete}
+        onRevoke={handleRevoke}
       />
     </div>
   );

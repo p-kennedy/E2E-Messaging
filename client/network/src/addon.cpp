@@ -55,7 +55,7 @@ Napi::Value Login(const Napi::CallbackInfo& info) {
     }
 }
 
-// sendMessage(host, port, token, recipient, ciphertext, nonce, header, signature, digest) → undefined
+// sendMessage(host, port, token, recipient, ciphertext, nonce, header, signature, digest) → JSON string
 Napi::Value SendMessage(const Napi::CallbackInfo& info) {
     auto env        = info.Env();
     auto host       = strArg(info, 0, "host");
@@ -71,11 +71,12 @@ Napi::Value SendMessage(const Napi::CallbackInfo& info) {
     try {
         MessageClient client(host, port);
         client.setAuthToken(token);
-        client.sendMessage(recipient, ciphertext, nonce, header, signature, digest);
+        std::string response = client.sendMessage(recipient, ciphertext, nonce, header, signature, digest);
+        return Napi::String::New(env, response);
     } catch (const std::exception& e) {
         Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+        return env.Undefined();
     }
-    return env.Undefined();
 }
 
 // fetchMessages(host, port, token) → raw JSON string
