@@ -193,12 +193,15 @@ ipcMain.handle('msg:send', async (_, { recipient, plaintext }) => {
 // ── IPC: delete message ───────────────────────────────────────────────────────
 
 ipcMain.handle('msg:delete', async (_, { messageId }) => {
-  const { token } = currentUser;
+  const { token, username, kek } = currentUser;
   const res = await fetch(
     `${process.env.SERVER_URL}/api/messages/${encodeURIComponent(messageId)}`,
     { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
   );
-  if (!res.ok) throw new Error(`Delete failed (${res.status}): ${await res.text()}`);
+  // 404 is fine — message was already auto-deleted after delivery
+  if (!res.ok && res.status !== 404) throw new Error(`Delete failed (${res.status}): ${await res.text()}`);
+  receivedLog = receivedLog.filter(m => m.message_id !== messageId);
+  store.saveReceivedLog(username, kek, receivedLog);
 });
 
 // ── IPC: revoke message (sender retracts before recipient reads) ───────────────
@@ -209,7 +212,8 @@ ipcMain.handle('msg:revoke', async (_, { messageId }) => {
     `${process.env.SERVER_URL}/api/messages/${encodeURIComponent(messageId)}`,
     { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
   );
-  if (!res.ok) throw new Error(`Revoke failed (${res.status}): ${await res.text()}`);
+  // 404 is fine — message was already delivered and auto-deleted
+  if (!res.ok && res.status !== 404) throw new Error(`Revoke failed (${res.status}): ${await res.text()}`);
   sentLog = sentLog.filter(m => m.message_id !== messageId);
   store.saveSentLog(username, kek, sentLog);
 });
