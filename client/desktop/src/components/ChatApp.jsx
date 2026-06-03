@@ -43,7 +43,13 @@ export default function ChatApp({ username, onLogout }) {
   const loadMessages = useCallback(async () => {
     try {
       const messages = await window.messagingAPI.fetchMessages();
-      setReceived(messages);
+      if (messages.length > 0) {
+        setReceived(prev => {
+          const existingIds = new Set(prev.map(m => m.message_id));
+          const fresh = messages.filter(m => !existingIds.has(m.message_id));
+          return fresh.length > 0 ? [...prev, ...fresh] : prev;
+        });
+      }
     } catch (err) {
       console.error('Failed to poll messages:', err);
     }
