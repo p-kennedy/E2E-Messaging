@@ -48,3 +48,6 @@ node_modules/
 
 # Snapshot cheatcodes output
 /snapshots
+
+# Network build
+client/network/build/*
